@@ -64,6 +64,30 @@ struct TuningSetting
   const char* value;
 };
 
+std::vector<TuningSetting> bv_batch_settings(bool kissat)
+{
+  std::vector<TuningSetting> settings{{"sat-phase", "0"}};
+  const TuningSetting extras[] = {{"cnf-generation-effort", "auto"},
+                                  {"kissat-adaptive-cnf", "true"},
+                                  {"kissat-import-order", "2"},
+                                  {"kissat-incremental-greedy", "4"},
+                                  {"kissat-batch-only", "true"}};
+  if (kissat)
+    for (const auto& setting : extras)
+      settings.push_back(setting);
+  return settings;
+}
+
+void add_tuning_bv_problem(TermManager& tm, Solver& solver)
+{
+  const Sort word = tm.mk_bv_sort(8);
+  const Term x = tm.declare("tuning_bv_x", word);
+  const Term y = tm.declare("tuning_bv_y", word);
+  solver.add(bvmul(x, y) == 143);
+  solver.add(bvugt(x, 1));
+  solver.add(bvugt(y, 1));
+}
+
 const TuningSetting kissat_abv_batch_settings[] = {
     {"cadical-factor", "off"},
     {"kissat-batch-only", "true"},
@@ -1185,4 +1209,298 @@ TEST(OptionEffects, copying_kissat_batch_options_does_not_copy_automatic_values)
   EXPECT_TRUE(flags_after(tm).kissat_batch_only);
   EXPECT_EQ(solver.options().resolved("kissat-one-shot-stable"),
             OptionValue(std::int64_t(0)));
+}
+
+TEST(OptionEffects, bv_batch_defaults_reach_native_and_parsed_encodings)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    const bool kissat = std::string(backend) == "kissat";
+    const auto settings = bv_batch_settings(kissat);
+    Options expected;
+    for (const auto& setting : settings)
+      expected.set(setting.name, setting.value);
+    for (const bool parsed : {false, true})
+      for (const bool forced_batch : {false, true})
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(parsed);
+        SCOPED_TRACE(forced_batch);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_bool("check-sanity", true);
+        if (!parsed)
+        {
+          options.set_str("logic", "QF_BV");
+          if (forced_batch)
+            options.set_str("incremental", "off");
+        }
+        Solver solver(tm, options);
+        if (parsed)
+        {
+          solver.parse_smt2("(set-logic QF_BV)");
+          if (forced_batch)
+            solver.parse_smt2("(set-option :incremental false)");
+        }
+        add_tuning_bv_problem(tm, solver);
+        bool emitted = false;
+        solver.set_cnf_sink(
+            [&](std::string_view, CnfScope)
+            {
+              emitted = true;
+              const auto& flags = flags_after(tm);
+              EXPECT_EQ(flags.sat_search_options.phase, 0);
+              EXPECT_EQ(flags.kissat_batch_only, kissat);
+              EXPECT_EQ(flags.kissat_adaptive_cnf, kissat);
+              EXPECT_EQ(flags.kissat_import_order, kissat ? 2 : 0);
+              EXPECT_EQ(flags.kissat_incremental_greedy, kissat ? 4 : 0);
+              EXPECT_EQ(flags.kissat_one_shot_stable, -1);
+            });
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_TRUE(emitted);
+        for (const auto& setting : settings)
+        {
+          SCOPED_TRACE(setting.name);
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    expected.resolved(setting.name));
+          EXPECT_EQ(solver.options().info(setting.name).resolved,
+                    expected.resolved(setting.name));
+          EXPECT_EQ(solver.options().get(setting.name),
+                    baseline.get(setting.name));
+          EXPECT_FALSE(solver.options().is_set(setting.name));
+        }
+      }
+  }
+}
+
+TEST(OptionEffects, bv_batch_defaults_preserve_explicit_baseline_values)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const bool parsed : {false, true})
+      for (const auto& setting :
+           bv_batch_settings(std::string(backend) == "kissat"))
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(parsed);
+        SCOPED_TRACE(setting.name);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        if (!parsed)
+        {
+          options.set_str("logic", "QF_BV");
+          options.set(setting.name,
+                      scalar_option_text(baseline.get(setting.name)));
+        }
+        Solver solver(tm, options);
+        if (parsed)
+          solver.parse_smt2(
+              "(set-logic QF_BV)(set-option :" + std::string(setting.name) +
+              " " + scalar_option_text(baseline.get(setting.name)) + ")");
+        const Term x = tm.declare("bv_explicit_x", tm.mk_bv_sort(8));
+        solver.add(x == 1);
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_TRUE(solver.options().is_set(setting.name));
+        EXPECT_EQ(solver.options().resolved(setting.name),
+                  baseline.get(setting.name));
+      }
+  }
+}
+
+TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    const bool kissat = std::string(backend) == "kissat";
+    const auto settings = bv_batch_settings(kissat);
+    Options expected;
+    if (kissat)
+    {
+      expected.set_str("search-bias", "unsat");
+      expected.set_str("cnf-generation-effort", "new-medium");
+    }
+    else
+      expected.set_int("sat-rephase", 0);
+    for (const bool parsed : {false, true})
+    {
+      SCOPED_TRACE(backend);
+      SCOPED_TRACE(parsed);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_bool("check-sanity", true);
+      options.set("incremental-auto-engage-at", "1");
+      if (!parsed)
+        options.set_str("logic", "QF_BV");
+      Solver solver(tm, options);
+      if (parsed)
+        solver.parse_smt2("(set-logic QF_BV)");
+      add_tuning_bv_problem(tm, solver);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
+      EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
+      EXPECT_EQ(flags_after(tm).kissat_batch_only, kissat);
+      if (parsed)
+        solver.parse_smt2("(push 1)");
+      else
+        solver.push();
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
+      for (const auto& setting : settings)
+      {
+        SCOPED_TRACE(setting.name);
+        EXPECT_EQ(solver.options().resolved(setting.name),
+                  expected.resolved(setting.name));
+      }
+      EXPECT_FALSE(flags_after(tm).kissat_batch_only);
+      EXPECT_FALSE(flags_after(tm).kissat_adaptive_cnf);
+      EXPECT_EQ(flags_after(tm).kissat_import_order, 0);
+      EXPECT_EQ(flags_after(tm).kissat_incremental_greedy, 0);
+      if (parsed)
+        solver.parse_smt2("(pop 1)");
+      else
+        solver.pop();
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_FALSE(flags_after(tm).kissat_batch_only);
+      EXPECT_EQ(solver.options().resolved("sat-phase"),
+                expected.resolved("sat-phase"));
+    }
+  }
+}
+
+TEST(OptionEffects, bv_batch_defaults_respect_opt_out_and_named_search)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const char* policy : {"off", "none", "sat", "unsat"})
+    {
+      SCOPED_TRACE(backend);
+      SCOPED_TRACE(policy);
+      const bool off = std::string(policy) == "off";
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_str("logic", "QF_BV");
+      options.set_str(off ? "sat-tuning" : "search-bias", policy);
+      Solver solver(tm, options);
+      const Term x = tm.declare("bv_policy_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_EQ(solver.options().resolved("sat-phase"),
+                options.resolved("sat-phase"));
+      for (const auto& setting :
+           bv_batch_settings(std::string(backend) == "kissat"))
+        if (off)
+        {
+          SCOPED_TRACE(setting.name);
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    baseline.get(setting.name));
+        }
+    }
+  }
+}
+
+TEST(OptionEffects, copying_bv_batch_options_does_not_copy_automatic_values)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    const bool kissat = std::string(backend) == "kissat";
+    const auto settings = bv_batch_settings(kissat);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", backend);
+    options.set_str("logic", "QF_BV");
+    Solver solver(tm, options);
+    const Term x = tm.declare("bv_copy_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    Options copied = solver.options().copy();
+    for (const auto& setting : settings)
+    {
+      SCOPED_TRACE(setting.name);
+      EXPECT_FALSE(copied.is_set(setting.name));
+      EXPECT_EQ(copied.get(setting.name), baseline.get(setting.name));
+    }
+    copied.reset("logic");
+    Solver other(tm, copied);
+    other.add(x == 2);
+    ASSERT_TRUE(other.check_sat().is_sat());
+    for (const auto& setting : settings)
+    {
+      SCOPED_TRACE(setting.name);
+      EXPECT_EQ(other.options().resolved(setting.name),
+                baseline.get(setting.name));
+    }
+    EXPECT_FALSE(flags_after(tm).kissat_batch_only);
+    EXPECT_FALSE(flags_after(tm).kissat_adaptive_cnf);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
+    EXPECT_EQ(flags_after(tm).kissat_batch_only, kissat);
+    EXPECT_EQ(flags_after(tm).kissat_import_order, kissat ? 2 : 0);
+    EXPECT_EQ(flags_after(tm).kissat_adaptive_cnf, kissat);
+  }
+}
+
+TEST(OptionEffects, kissat_bv_batch_defaults_preserve_closed_option_windows)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  TermManager tm;
+  Options options;
+  options.set_str("sat-backend", "kissat");
+  options.set_str("logic", "QF_BV");
+  Solver solver(tm, options);
+  const Term x = tm.declare("bv_window_x", tm.mk_bv_sort(8));
+  solver.add(x == 1);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  for (const auto& setting : bv_batch_settings(true))
+    if (std::string(setting.name) != "cnf-generation-effort")
+    {
+      SCOPED_TRACE(setting.name);
+      const auto before = solver.options().resolved(setting.name);
+      API_EXPECT_ERROR(
+          ErrorCode::OPTION_TIMING,
+          solver.options().set(setting.name,
+                               scalar_option_text(baseline.get(setting.name))));
+      EXPECT_EQ(solver.options().resolved(setting.name), before);
+      EXPECT_FALSE(solver.options().is_set(setting.name));
+    }
 }

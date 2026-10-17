@@ -25,7 +25,13 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
     * - Kissat
       - QF_BV
       - Batch
-      - ``sat-phase=0``, ``cnf-generation-effort=new-medium``
+      - ``sat-phase=0``, ``cnf-generation-effort=auto``,
+        ``kissat-adaptive-cnf=true``, ``kissat-import-order=2``,
+        ``kissat-incremental-greedy=4``, ``kissat-batch-only=true``
+    * - CaDiCaL
+      - QF_BV
+      - Batch
+      - ``sat-phase=0``
     * - CaDiCaL
       - QF_BV
       - Incremental
@@ -79,6 +85,9 @@ Other combinations use the baseline policy. The Kissat QF_ABV batch profile
 uses focused search only when its complete one-shot encoding is eligible.
 Partial encodings and array-refinement calls retain their ordinary search
 mode. Its late array expansion and congruence settings have explicit budgets.
+The QF_BV batch profile also requests complete one-shot encodings while
+retaining the ordinary search mode. Its greedy setting applies to calls
+that retain native incremental solving.
 The CaDiCaL QF_ABV batch profile uses
 ``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
 for its cut-reference walks, fixing the stack overflow on wide
@@ -187,12 +196,13 @@ control after its first-check window has closed.
 Measurements
 ------------
 
-The confirmed finalists reduced mean PAR2 from 1.759 to 1.577 seconds on
+The initial tuning study reduced mean PAR2 from 1.759 to 1.577 seconds on
 46,191 batch QF_BV files with Kissat; from 4.695 to 2.806 seconds on 1,272
 files in the incremental QF_ABV directory with CaDiCaL; and from 4.469 to
 3.780 seconds on the same directory with Kissat. On 15,148 batch QF_ABV
 files, the CaDiCaL finalist reduced mean PAR2 from 0.717 to 0.685 seconds.
-These measured commands set their tuning options from the start of the file.
+That study preceded the batch profile updates above. Its measured commands
+set their tuning options from the start of the file.
 
 The incremental directory contains 970 files with multiple checks and 302
 with one check. On the multiple-check subset, the CaDiCaL finalist reduced

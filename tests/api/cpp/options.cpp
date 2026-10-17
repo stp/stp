@@ -1338,7 +1338,8 @@ TEST(Options, kissat_greedy_tuning_resolves_by_logic_and_session)
       const bool bvfp = std::string(logic) == "QF_BVFP";
       const bool abvfp = std::string(logic) == "QF_ABVFP";
       const bool tuned =
-          std::string(incremental) == "on" && (bv || bvfp || abvfp);
+          (std::string(incremental) == "on" && (bv || bvfp || abvfp)) ||
+          (std::string(incremental) == "off" && bv);
       Options expected;
       if (tuned)
       {

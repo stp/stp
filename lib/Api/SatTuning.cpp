@@ -64,9 +64,15 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
   // QF_BV search, and found that QF_ABV benefits from pairing the in-house
   // encoding with disabled target phases, rephasing and Kissat probing.
   static const Profile baseline{"backend-defaults", {}};
-  static const Profile kissat_bv_batch{
-      "kissat-qf-bv-batch",
-      {{"sat-phase", "0"}, {"cnf-generation-effort", "new-medium"}}};
+  static const Profile kissat_bv_batch{"kissat-qf-bv-batch",
+                                       {{"sat-phase", "0"},
+                                        {"cnf-generation-effort", "auto"},
+                                        {"kissat-adaptive-cnf", "true"},
+                                        {"kissat-import-order", "2"},
+                                        {"kissat-incremental-greedy", "4"},
+                                        {"kissat-batch-only", "true"}}};
+  static const Profile cadical_bv_batch{"cadical-qf-bv-batch",
+                                        {{"sat-phase", "0"}}};
   static const Profile kissat_abv_batch{
       "kissat-qf-abv-batch",
       {{"cadical-factor", "off"},
@@ -142,6 +148,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
+  if (backend == Flags::CADICAL_SOLVER && logic == "QF_BV" && !incremental)
+    return cadical_bv_batch;
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_ABV" && !incremental)
     return kissat_abv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
