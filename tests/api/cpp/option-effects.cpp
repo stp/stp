@@ -58,6 +58,34 @@ void add_tuning_array_problem(TermManager& tm, Solver& s)
   s.add(bvugt(y, 1));
 }
 
+struct TuningSetting
+{
+  const char* name;
+  const char* value;
+};
+
+const TuningSetting kissat_abv_batch_settings[] = {
+    {"cadical-factor", "off"},
+    {"kissat-batch-only", "true"},
+    {"kissat-one-shot-stable", "0"},
+    {"cnf-auto-threshold", "0"},
+    {"array-late-read-limit", "1024"},
+    {"array-late-expansion-limit", "100000"},
+    {"array-late-congruence-limit", "16000"},
+    {"array-equality-gia-cnf", "true"},
+    {"array-equality-gia-min-reads", "16"}};
+
+std::string scalar_option_text(const OptionValue& value)
+{
+  if (const auto* v = std::get_if<bool>(&value))
+    return *v ? "true" : "false";
+  if (const auto* v = std::get_if<std::int64_t>(&value))
+    return std::to_string(*v);
+  if (const auto* v = std::get_if<std::uint64_t>(&value))
+    return std::to_string(*v);
+  return std::get<std::string>(value);
+}
+
 enum class TakeBack
 {
   FALSE,
@@ -848,4 +876,313 @@ TEST(OptionEffects, double_equality_option_handles_prebuilt_raw_terms)
   ASSERT_TRUE(solver.check_sat().is_unsat());
   EXPECT_TRUE(flags_after(tm).enable_double_equality);
   EXPECT_FALSE(emitted);
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_reach_native_and_parsed_encodings)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  Options expected;
+  for (const auto& setting : kissat_abv_batch_settings)
+    expected.set(setting.name, setting.value);
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_bool("check-sanity", true);
+    if (!parsed)
+      options.set_str("logic", "QF_ABV");
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-logic QF_ABV)");
+    add_tuning_array_problem(tm, solver);
+    bool emitted = false;
+    solver.set_cnf_sink(
+        [&](std::string_view, CnfScope)
+        {
+          emitted = true;
+          const auto& flags = flags_after(tm);
+          EXPECT_TRUE(flags.kissat_batch_only);
+          EXPECT_EQ(flags.kissat_one_shot_stable, 0);
+          EXPECT_EQ(flags.cnf_auto_threshold, 0u);
+          EXPECT_EQ(flags.array_late_read_limit, 1024);
+          EXPECT_EQ(flags.array_late_expansion_limit, 100000u);
+          EXPECT_EQ(flags.array_late_congruence_limit, 16000u);
+          EXPECT_TRUE(flags.array_equality_gia_cnf);
+          EXPECT_EQ(flags.array_equality_gia_min_reads, 16);
+          EXPECT_EQ(flags.cadical_factor, stp::UserDefinedFlags::BVAMode::OFF);
+        });
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_TRUE(emitted);
+    for (const auto& setting : kissat_abv_batch_settings)
+    {
+      SCOPED_TRACE(setting.name);
+      EXPECT_EQ(solver.options().resolved(setting.name),
+                expected.resolved(setting.name));
+      EXPECT_EQ(solver.options().get(setting.name), baseline.get(setting.name));
+      EXPECT_FALSE(solver.options().is_set(setting.name));
+    }
+  }
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_preserve_explicit_baseline_values)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  for (const bool parsed : {false, true})
+    for (const auto& setting : kissat_abv_batch_settings)
+    {
+      SCOPED_TRACE(parsed);
+      SCOPED_TRACE(setting.name);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", "kissat");
+      if (!parsed)
+      {
+        options.set_str("logic", "QF_ABV");
+        options.set(setting.name,
+                    scalar_option_text(baseline.get(setting.name)));
+      }
+      Solver solver(tm, options);
+      if (parsed)
+        solver.parse_smt2(
+            "(set-logic QF_ABV)(set-option :" + std::string(setting.name) +
+            " " + scalar_option_text(baseline.get(setting.name)) + ")");
+      const Term x = tm.declare("batch_explicit_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_TRUE(solver.options().is_set(setting.name));
+      EXPECT_EQ(solver.options().resolved(setting.name),
+                baseline.get(setting.name));
+    }
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_preserve_global_search_modes)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool parsed : {false, true})
+    for (int global : {-1, 0, 1, 2})
+      for (int specific : {-2, -1, 0, 1, 2})
+      {
+        SCOPED_TRACE(parsed);
+        SCOPED_TRACE(global);
+        SCOPED_TRACE(specific);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", "kissat");
+        if (!parsed)
+        {
+          options.set_str("logic", "QF_ABV");
+          options.set_int("kissat-stable", global);
+          if (specific != -2)
+            options.set_int("kissat-one-shot-stable", specific);
+        }
+        Solver solver(tm, options);
+        if (parsed)
+        {
+          solver.parse_smt2("(set-logic QF_ABV)(set-option :kissat-stable " +
+                            std::to_string(global) + ")");
+          if (specific != -2)
+            solver.parse_smt2("(set-option :kissat-one-shot-stable " +
+                              std::to_string(specific) + ")");
+        }
+        const Term x = tm.declare("batch_mode_x", tm.mk_bv_sort(8));
+        solver.add(x == 1);
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_EQ(flags_after(tm).kissat_stable, global);
+        EXPECT_EQ(flags_after(tm).kissat_one_shot_stable,
+                  specific == -2 ? -1 : specific);
+        EXPECT_EQ(solver.options().resolved("kissat-one-shot-stable"),
+                  OptionValue(std::int64_t(specific == -2 ? -1 : specific)));
+      }
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_retire_before_a_late_push)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_bool("check-sanity", true);
+    options.set("incremental-auto-engage-at", "1");
+    if (!parsed)
+      options.set_str("logic", "QF_ABV");
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-logic QF_ABV)");
+    add_tuning_array_problem(tm, solver);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
+    EXPECT_TRUE(flags_after(tm).kissat_batch_only);
+    if (parsed)
+      solver.parse_smt2("(push 1)");
+    else
+      solver.push();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
+    EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::SAT);
+    EXPECT_EQ(flags_after(tm).kissat_stable, 2);
+    for (const auto& setting : kissat_abv_batch_settings)
+      if (std::string(setting.name) != "cadical-factor")
+      {
+        SCOPED_TRACE(setting.name);
+        EXPECT_EQ(solver.options().resolved(setting.name),
+                  baseline.get(setting.name));
+      }
+    EXPECT_FALSE(flags_after(tm).kissat_batch_only);
+    EXPECT_EQ(flags_after(tm).kissat_one_shot_stable, -1);
+    EXPECT_EQ(flags_after(tm).cnf_auto_threshold, 200000u);
+    EXPECT_EQ(flags_after(tm).array_late_read_limit, 0);
+    EXPECT_EQ(flags_after(tm).array_late_expansion_limit, 200u);
+    EXPECT_EQ(flags_after(tm).array_late_congruence_limit, 4000u);
+    EXPECT_FALSE(flags_after(tm).array_equality_gia_cnf);
+    if (parsed)
+      solver.parse_smt2("(pop 1)");
+    else
+      solver.pop();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_FALSE(flags_after(tm).kissat_batch_only);
+  }
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_respect_opt_out_and_named_search)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  for (const char* policy : {"off", "none", "sat", "unsat"})
+  {
+    SCOPED_TRACE(policy);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_str("logic", "QF_ABV");
+    const bool off = std::string(policy) == "off";
+    options.set_str(off ? "sat-tuning" : "search-bias", policy);
+    Solver solver(tm, options);
+    const Term x = tm.declare("batch_optout_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_EQ(solver.options().resolved("kissat-one-shot-stable"),
+              baseline.get("kissat-one-shot-stable"));
+    if (off)
+      for (const auto& setting : kissat_abv_batch_settings)
+      {
+        SCOPED_TRACE(setting.name);
+        EXPECT_EQ(solver.options().resolved(setting.name),
+                  baseline.get(setting.name));
+      }
+  }
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_leave_other_backends_unchanged)
+{
+  const Options baseline;
+  for (const char* backend :
+       {"cadical", "cryptominisat", "minisat", "simplifying-minisat", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const char* incremental : {"on", "off", "auto"})
+    {
+      if (std::string(backend) == "kissat" && std::string(incremental) != "on")
+        continue;
+      SCOPED_TRACE(backend);
+      SCOPED_TRACE(incremental);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_str("logic", "QF_ABV");
+      options.set_str("incremental", incremental);
+      Solver solver(tm, options);
+      const Term x = tm.declare("batch_other_backend_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      for (const auto& setting : kissat_abv_batch_settings)
+        if (std::string(setting.name) != "cadical-factor")
+        {
+          SCOPED_TRACE(setting.name);
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    baseline.get(setting.name));
+        }
+    }
+  }
+}
+
+TEST(OptionEffects, kissat_abv_batch_defaults_preserve_closed_option_windows)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool explicit_global : {false, true})
+  {
+    SCOPED_TRACE(explicit_global);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_str("logic", "QF_ABV");
+    if (explicit_global)
+      options.set_int("kissat-stable", -1);
+    Solver solver(tm, options);
+    const Term x = tm.declare("batch_closed_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    const OptionValue before =
+        solver.options().resolved("kissat-one-shot-stable");
+    EXPECT_EQ(before, OptionValue(std::int64_t(explicit_global ? -1 : 0)));
+    API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                     solver.options().set_int("kissat-stable", -1));
+    API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                     solver.options().reset("kissat-stable"));
+    API_EXPECT_ERROR(ErrorCode::OPTION_TIMING, solver.options().reset_all());
+    EXPECT_EQ(solver.options().is_set("kissat-stable"), explicit_global);
+    EXPECT_EQ(solver.options().resolved("kissat-one-shot-stable"), before);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+  }
+}
+
+TEST(OptionEffects, copying_kissat_batch_options_does_not_copy_automatic_values)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  TermManager tm;
+  Options options;
+  options.set_str("sat-backend", "kissat");
+  options.set_str("logic", "QF_ABV");
+  Solver solver(tm, options);
+  const Term x = tm.declare("batch_copy_x", tm.mk_bv_sort(8));
+  solver.add(x == 1);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  Options copied = solver.options().copy();
+  for (const auto& setting : kissat_abv_batch_settings)
+  {
+    SCOPED_TRACE(setting.name);
+    EXPECT_FALSE(copied.is_set(setting.name));
+    EXPECT_EQ(copied.get(setting.name), baseline.get(setting.name));
+  }
+  copied.reset("logic");
+  Solver other(tm, copied);
+  other.add(x == 2);
+  ASSERT_TRUE(other.check_sat().is_sat());
+  for (const auto& setting : kissat_abv_batch_settings)
+  {
+    SCOPED_TRACE(setting.name);
+    EXPECT_EQ(other.options().resolved(setting.name),
+              baseline.get(setting.name));
+  }
+  EXPECT_FALSE(flags_after(tm).kissat_batch_only);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).kissat_batch_only);
+  EXPECT_EQ(solver.options().resolved("kissat-one-shot-stable"),
+            OptionValue(std::int64_t(0)));
 }

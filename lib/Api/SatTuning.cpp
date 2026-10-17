@@ -67,6 +67,17 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
   static const Profile kissat_bv_batch{
       "kissat-qf-bv-batch",
       {{"sat-phase", "0"}, {"cnf-generation-effort", "new-medium"}}};
+  static const Profile kissat_abv_batch{
+      "kissat-qf-abv-batch",
+      {{"cadical-factor", "off"},
+       {"kissat-batch-only", "true"},
+       {"kissat-one-shot-stable", "0"},
+       {"cnf-auto-threshold", "0"},
+       {"array-late-read-limit", "1024"},
+       {"array-late-expansion-limit", "100000"},
+       {"array-late-congruence-limit", "16000"},
+       {"array-equality-gia-cnf", "true"},
+       {"array-equality-gia-min-reads", "16"}}};
   static const Profile cadical_abv_batch{
       "cadical-qf-abv-batch",
       {{"search-bias", "unsat"},
@@ -131,6 +142,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
+  if (backend == Flags::KISSAT_SOLVER && logic == "QF_ABV" && !incremental)
+    return kissat_abv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
     return cadical_abv_batch;
   if (logic == "QF_BV" && incremental)
@@ -159,7 +172,6 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::KISSAT_SOLVER)
       return kissat_abvfp_forced_incremental;
   }
-  // The Kissat batch QF_ABV finalist was slower than its baseline.
   return baseline;
 }
 
@@ -224,6 +236,11 @@ void apply_sat_tuning_defaults(const OptionsImpl& options,
     // An explicitly named search configuration owns its phase/mode policy.
     // Individual explicit phase/mode controls still override it normally.
     if (explicit_bias && search_setting(spec_at(index).name))
+      continue;
+    // A user-selected global mode also governs a complete one-shot copy.
+    // A separately explicit one-shot mode still takes precedence normally.
+    if (std::string_view(spec_at(index).name) == "kissat-one-shot-stable" &&
+        options.is_set[index_of("kissat-stable")])
       continue;
     derived.resolved[index] = value;
     derived.at_default[index] = false;

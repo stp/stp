@@ -40,6 +40,15 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Batch
       - ``search-bias=unsat``, ``cnf-generation-effort=gia-low``,
         ``cadical-factor=off``
+    * - Kissat
+      - QF_ABV
+      - Batch
+      - ``kissat-factor=off``, ``kissat-batch-only=true``,
+        ``kissat-one-shot-stable=0``, ``cnf-auto-threshold=0``,
+        ``array-late-read-limit=1024``,
+        ``array-late-expansion-limit=100000``,
+        ``array-late-congruence-limit=16000``,
+        ``array-equality-gia-cnf=true``, ``array-equality-gia-min-reads=16``
     * - CaDiCaL
       - QF_ABV
       - Incremental
@@ -66,8 +75,11 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Forced incremental
       - The forced QF_ABV settings above
 
-Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
-was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
+Other combinations use the baseline policy. The Kissat QF_ABV batch profile
+uses focused search only when its complete one-shot encoding is eligible.
+Partial encodings and array-refinement calls retain their ordinary search
+mode. Its late array expansion and congruence settings have explicit budgets.
+The CaDiCaL QF_ABV batch profile uses
 ``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
 for its cut-reference walks, fixing the stack overflow on wide
 division/remainder encodings.
@@ -138,6 +150,12 @@ configuration. Automatic phase, target and Kissat stable-mode choices are
 suppressed in that case; individual explicit phase/mode options take
 precedence over the named configuration as usual. Encoding and factoring
 defaults can still come from the automatic profile.
+
+An explicit ``kissat-stable`` also suppresses the automatic
+``kissat-one-shot-stable`` default, including when its value is ``-1``.
+An explicitly supplied ``kissat-one-shot-stable`` still overrides the global
+mode on an eligible complete one-shot copy. A later push retires batch-only
+defaults before the incremental profile is applied.
 
 Use ``--sat-tuning=off`` to reproduce baseline defaults or compare manual
 configurations without automatic tuning. The SMT-LIB spelling is
