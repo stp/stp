@@ -602,3 +602,40 @@ TEST(OptionEffects,
               solver.options().set_bool("kissat-adaptive-cnf", !adaptive));
         }
 }
+
+TEST(OptionEffects, kissat_one_shot_mode_reaches_native_and_parsed_checks)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool parsed : {false, true})
+    for (const char* incremental : {"on", "off"})
+      for (const bool batch : {false, true})
+        for (int mode : {-1, 0, 1, 2})
+        {
+          SCOPED_TRACE(parsed);
+          SCOPED_TRACE(incremental);
+          SCOPED_TRACE(batch);
+          SCOPED_TRACE(mode);
+          TermManager tm;
+          Options options;
+          options.set_str("sat-backend", "kissat");
+          options.set_str("incremental", incremental);
+          options.set_bool("kissat-batch-only", batch);
+          options.set_bool("check-sanity", true);
+          if (!parsed)
+            options.set_int("kissat-one-shot-stable", mode);
+          Solver solver(tm, options);
+          if (parsed)
+            solver.parse_smt2("(set-option :kissat-one-shot-stable " +
+                              std::to_string(mode) + ")");
+          add_tuning_array_problem(tm, solver);
+          ASSERT_TRUE(solver.check_sat().is_sat());
+          EXPECT_EQ(flags_after(tm).kissat_one_shot_stable, mode);
+          EXPECT_EQ(solver.options().resolved("kissat-one-shot-stable"),
+                    OptionValue(std::int64_t(mode)));
+          EXPECT_TRUE(solver.options().is_set("kissat-one-shot-stable"));
+          API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                           solver.options().set_int("kissat-one-shot-stable",
+                                                    mode == 0 ? 1 : 0));
+        }
+}

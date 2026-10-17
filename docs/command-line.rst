@@ -245,6 +245,13 @@ and ``2`` reserves the maximum allocated ID before clauses. This choice
 applies at the first clause; later incremental variables use the ordinary
 import path.
 
+``--kissat-batch-only=true`` permits one-shot solving for a fresh complete
+batch encoding. ``--kissat-one-shot-stable`` can select its search mode:
+``0`` focused, ``1`` alternating focused and stable, or ``2`` stable.
+The default ``-1`` inherits the ordinary mode. An explicit one-shot mode
+overrides ``--kissat-stable`` for that encoding; incremental sessions and
+queries that need refinement retain their ordinary search mode.
+
 Other options
 -------------
 

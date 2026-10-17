@@ -34,6 +34,7 @@ class DLL_PUBLIC Kissat : public SATSolver
   bool trail_reuse_allowed;
   int trail_reuse_mode;
   int search_mode;
+  int one_shot_search_mode = -1;
   uint64_t solve_calls = 0;
   bool one_shot = false;
   int import_order = 0;
@@ -62,6 +63,7 @@ public:
   };
   void setGreedyOptions(const GreedyOptions& options);
   void setImportOrder(int order);
+  void setOneShotSearchMode(int mode);
   bool okay() const override;
   bool supportsAssumptions() const override { return !one_shot; }
   bool configureOneShot() override;

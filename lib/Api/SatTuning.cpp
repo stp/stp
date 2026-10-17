@@ -180,7 +180,7 @@ bool search_setting(std::string_view name)
 {
   return name == "sat-phase" || name == "sat-forcephase" ||
          name == "sat-rephase" || name == "sat-target" ||
-         name == "kissat-stable";
+         name == "kissat-stable" || name == "kissat-one-shot-stable";
 }
 
 const char* backend_name(Flags::SATSolvers backend)

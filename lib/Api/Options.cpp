@@ -1559,6 +1559,7 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
                            "sat-rephase",
                            "sat-target",
                            "kissat-stable",
+                           "kissat-one-shot-stable",
                            "kissat-probe",
                            "kissat-eliminate",
                            "kissat-incremental-greedy",

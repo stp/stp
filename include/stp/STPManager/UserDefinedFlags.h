@@ -2042,6 +2042,7 @@ public:
   bool kissat_greedy_phase_cache = false;
   int kissat_eliminate = -1;
   int kissat_stable = -1;
+  int kissat_one_shot_stable = -1;
   bool kissat_batch_only = false;
   int kissat_import_order = 0;
   bool kissat_adaptive_cnf = false;

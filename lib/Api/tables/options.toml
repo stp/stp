@@ -1090,6 +1090,19 @@ requires = { build = "kissat" }
 help = "Kissat search mode: -1 follows --search-bias, 0 focused only, 1 switches focused and stable, 2 stable only; an explicit mode overrides the search bias hint"
 
 [[option]]
+name = "kissat-one-shot-stable"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_one_shot_stable" }
+category = "sat"
+requires = { build = "kissat" }
+help = "experimental search mode for a fresh complete Kissat batch encoding: -1 inherits the ordinary mode, 0 focused only, 1 switches focused and stable, 2 stable only; requires kissat-batch-only and overrides kissat-stable only when one-shot solving is eligible"
+
+[[option]]
 name = "incremental-inprobing"
 type = "mode"
 default = "auto"
