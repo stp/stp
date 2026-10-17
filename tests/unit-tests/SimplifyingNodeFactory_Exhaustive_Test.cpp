@@ -169,6 +169,118 @@ struct Context
   }
 };
 
+TEST(SimplifyingNodeFactory_Exhaustive,
+     conditional_equality_lifts_symbol_definitions)
+{
+  Context c;
+  c.mgr.UserFlags.enable_conditional_equality = true;
+  for (unsigned width : {1u, 2u, 3u})
+  {
+    SCOPED_TRACE(width);
+    const ASTNode condition = c.boolean();
+    const ASTNode x = c.bv(width), a = c.bv(width), b = c.bv(width);
+    for (unsigned left = 0; left < 2; left++)
+      for (unsigned right = 0; right < 2; right++)
+      {
+        const ASTNode yes =
+            left ? c.hf->CreateNode(EQ, a, x) : c.hf->CreateNode(EQ, x, a);
+        const ASTNode no =
+            right ? c.hf->CreateNode(EQ, b, x) : c.hf->CreateNode(EQ, x, b);
+        const ASTNode before = c.hf->CreateNode(ITE, condition, yes, no);
+        const ASTNode after = c.nf->CreateNode(ITE, condition, yes, no);
+        ASSERT_EQ(after.GetKind(), EQ);
+        EXPECT_NE(before, after);
+        EXPECT_TRUE(after[0] == x || after[1] == x);
+        const ASTNode value = after[after[0] == x ? 1 : 0];
+        ASSERT_EQ(value.GetKind(), ITE);
+        EXPECT_EQ(value[0], condition);
+        EXPECT_EQ(value[1], a);
+        EXPECT_EQ(value[2], b);
+        c.checkEquivalent(before, after);
+      }
+  }
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, conditional_equality_is_opt_in)
+{
+  const UserDefinedFlags defaults;
+  EXPECT_FALSE(defaults.enable_conditional_equality);
+  Context c;
+  const ASTNode condition = c.boolean();
+  const ASTNode x = c.bv(8), a = c.bv(8), b = c.bv(8);
+  const ASTNode yes = c.hf->CreateNode(EQ, x, a);
+  const ASTNode no = c.hf->CreateNode(EQ, x, b);
+  const ASTNode before = c.hf->CreateNode(ITE, condition, yes, no);
+  EXPECT_EQ(before, c.nf->CreateNode(ITE, condition, yes, no));
+  c.mgr.UserFlags.enable_conditional_equality = true;
+  EXPECT_NE(before, c.nf->CreateNode(ITE, condition, yes, no));
+  c.mgr.UserFlags.disableSimplifications();
+  EXPECT_FALSE(c.mgr.UserFlags.enable_conditional_equality);
+  EXPECT_EQ(before, c.nf->CreateNode(ITE, condition, yes, no));
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive,
+     conditional_equality_requires_a_common_symbol)
+{
+  Context c;
+  c.mgr.UserFlags.enable_conditional_equality = true;
+  const ASTNode condition = c.boolean();
+  const ASTNode x = c.bv(2), y = c.bv(2), a = c.bv(2), b = c.bv(2);
+  const ASTNode zero = c.konst(0, 2), one = c.konst(1, 2);
+  const ASTNode compound = c.hf->CreateTerm(BVPLUS, 2, x, one);
+  const ASTVec yes = {c.hf->CreateNode(EQ, x, zero),
+                      c.hf->CreateNode(EQ, compound, a),
+                      c.hf->CreateNode(EQ, x, a), c.hf->CreateNode(BVGT, x, a)};
+  const ASTVec no = {c.hf->CreateNode(EQ, y, zero),
+                     c.hf->CreateNode(EQ, compound, b),
+                     c.hf->CreateNode(EQ, y, b), c.hf->CreateNode(EQ, x, b)};
+  for (unsigned i = 0; i < yes.size(); i++)
+  {
+    const ASTNode before = c.hf->CreateNode(ITE, condition, yes[i], no[i]);
+    EXPECT_EQ(before, c.nf->CreateNode(ITE, condition, yes[i], no[i]));
+    c.checkEquivalent(before, c.nf->CreateNode(ITE, condition, yes[i], no[i]));
+  }
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive,
+     conditional_equality_preserves_self_reference)
+{
+  Context c;
+  c.mgr.UserFlags.enable_conditional_equality = true;
+  const ASTNode x = c.bv(3), y = c.bv(3);
+  const ASTNode condition = c.hf->CreateNode(EQ, x, y);
+  const ASTNode next = c.hf->CreateTerm(BVPLUS, 3, x, c.konst(1, 3));
+  const ASTNode yes = c.hf->CreateNode(EQ, x, next);
+  const ASTNode previous = c.hf->CreateTerm(BVXOR, 3, y, c.konst(1, 3));
+  const ASTNode no = c.hf->CreateNode(EQ, x, previous);
+  const ASTNode before = c.hf->CreateNode(ITE, condition, yes, no);
+  const ASTNode after = c.nf->CreateNode(ITE, condition, yes, no);
+  EXPECT_EQ(after.GetKind(), EQ);
+  EXPECT_NE(before, after);
+  c.checkEquivalent(before, after);
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive,
+     conditional_equality_handles_wide_words_and_deep_inputs)
+{
+  Context c;
+  c.mgr.UserFlags.enable_conditional_equality = true;
+  const ASTNode condition = c.boolean();
+  const ASTNode x = c.bv(20000), a = c.bv(20000), b = c.bv(20000);
+  const ASTNode yes = c.hf->CreateNode(EQ, x, a);
+  ASTNode result = c.hf->CreateNode(EQ, x, b);
+  for (unsigned i = 0; i < 5000; i++)
+  {
+    result = c.nf->CreateNode(ITE, c.boolean(), yes, result);
+    ASSERT_EQ(result.GetKind(), EQ);
+    EXPECT_TRUE(result[0] == x || result[1] == x);
+  }
+  const ASTNode wide =
+      c.nf->CreateNode(ITE, condition, yes, c.hf->CreateNode(EQ, x, b));
+  ASSERT_EQ(wide.GetKind(), EQ);
+  EXPECT_EQ(wide[wide[0] == x ? 1 : 0].GetValueWidth(), 20000u);
+}
+
 TEST(SimplifyingNodeFactory_Exhaustive, unsigned_adjacent_comparison_bounds)
 {
   Context c(true);

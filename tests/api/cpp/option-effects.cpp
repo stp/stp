@@ -702,3 +702,81 @@ TEST(OptionEffects, adjacent_bounds_option_handles_prebuilt_raw_terms)
   ASSERT_TRUE(solver.check_sat().is_unsat());
   EXPECT_FALSE(emitted);
 }
+
+TEST(OptionEffects,
+     conditional_equality_option_reaches_native_and_parsed_checks)
+{
+  EXPECT_FALSE(Options().get_bool("bv-conditional-equality"));
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_bool("check-sanity", true);
+    if (!parsed)
+      options.set_bool("bv-conditional-equality", true);
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-option :bv-conditional-equality true)");
+    solver.parse_smt2(
+        "(set-logic QF_BV)(declare-const c Bool)"
+        "(declare-const x (_ BitVec 8))(declare-const a (_ BitVec 8))"
+        "(declare-const b (_ BitVec 8))"
+        "(assert (ite c (= x a) (= x b)))"
+        "(assert (= a #x09))(assert (= b #x0b))"
+        "(assert (distinct x a))");
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+    EXPECT_TRUE(solver.options().is_set("bv-conditional-equality"));
+    EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
+              OptionValue(true));
+    API_EXPECT_ERROR(
+        ErrorCode::OPTION_TIMING,
+        solver.options().set_bool("bv-conditional-equality", false));
+    solver.push();
+    solver.parse_smt2("(assert c)");
+    ASSERT_TRUE(solver.check_sat().is_unsat());
+    solver.pop();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+  }
+}
+
+TEST(OptionEffects, conditional_equality_option_retires_on_solver_activation)
+{
+  TermManager tm;
+  Options options;
+  options.set_bool("bv-conditional-equality", true);
+  Solver on(tm, options), off(tm);
+  const Term x = tm.declare("conditional_switch_x", tm.mk_bv_sort(8));
+  on.add(x == 1);
+  off.add(x == 2);
+  ASSERT_TRUE(on.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+  ASSERT_TRUE(off.check_sat().is_sat());
+  EXPECT_FALSE(flags_after(tm).enable_conditional_equality);
+  ASSERT_TRUE(on.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+}
+
+TEST(OptionEffects, conditional_equality_option_handles_prebuilt_raw_terms)
+{
+  TermManager::Config config;
+  config.simplify = false;
+  TermManager tm(config);
+  const Term condition = tm.declare("conditional_raw_c", tm.mk_bool_sort());
+  const Sort word = tm.mk_bv_sort(8);
+  const Term x = tm.declare("conditional_raw_x", word);
+  const Term a = tm.declare("conditional_raw_a", word);
+  const Term b = tm.declare("conditional_raw_b", word);
+  const Term definition = ite(condition, x == a, x == b);
+  const Term opposite = x != ite(condition, a, b);
+  Options options;
+  options.set_bool("bv-conditional-equality", true);
+  Solver solver(tm, options);
+  solver.add(definition && opposite);
+  bool emitted = false;
+  solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
+  ASSERT_TRUE(solver.check_sat().is_unsat());
+  EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+  EXPECT_FALSE(emitted);
+}

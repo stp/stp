@@ -23,6 +23,13 @@ It applies to every SAT backend and is disabled by default because the
 encoding change can help or hurt SAT search. Set it before the first check;
 the SMT-LIB spelling is ``(set-option :bv-adjacent-bounds true)``.
 
+``--bv-conditional-equality=true`` lifts conditional definitions of a shared
+bit-vector symbol: ``ite(c, x = a, x = b)`` becomes ``x = ite(c, a, b)``.
+This exposes the definition to word-level equality substitution. The option
+applies to every SAT backend and is disabled by default. Set it before the
+first check; the SMT-LIB spelling is
+``(set-option :bv-conditional-equality true)``.
+
 Input
 -----
 
