@@ -999,6 +999,39 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
       }
   }
 
+  // An adjacent bound removes the addition, with its wrap point excluded:
+  // (x + 1) >u y <=> x != ones && x >=u y,
+  // y >u (x - 1) <=> x != zero && y >=u x.
+  for (unsigned side = 0; side < 2; side++)
+  {
+    const ASTNode& plus = children[side];
+    if (plus.GetKind() != BVPLUS || plus.Degree() != 2)
+      continue;
+    const unsigned width = plus.GetValueWidth();
+    for (unsigned i = 0; i < 2; i++)
+    {
+      if (plus[i].GetKind() != stp::BVCONST)
+        continue;
+      // Do not allocate a constant just to test an unsuccessful match.
+      const bool adjacent =
+          side == 0 ? CONSTANTBV::Set_Max(plus[i].GetBVConst()) == 0
+                    : CONSTANTBV::BitVector_is_full(plus[i].GetBVConst());
+      if (!adjacent)
+        continue;
+      const ASTNode& x = plus[1 - i];
+      const ASTNode& y = children[1 - side];
+      const ASTNode bound =
+          side == 0 ? bm.CreateMaxConst(width) : bm.CreateZeroConst(width);
+      const ASTNode noWrap = NodeFactory::CreateNode(
+          stp::NOT, NodeFactory::CreateNode(EQ, x, bound));
+      const ASTNode greater = side == 0
+                                  ? NodeFactory::CreateNode(stp::BVGT, y, x)
+                                  : NodeFactory::CreateNode(stp::BVGT, x, y);
+      return NodeFactory::CreateNode(
+          stp::AND, noWrap, NodeFactory::CreateNode(stp::NOT, greater));
+    }
+  }
+
   //2nd part is the same ->only care about 1st part
   if (children[0].GetKind() == BVCONCAT && children[1].GetKind() == BVCONCAT &&
       children[0][1] == children[1][1])

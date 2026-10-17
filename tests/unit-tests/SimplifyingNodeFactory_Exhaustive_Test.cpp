@@ -168,6 +168,102 @@ struct Context
   }
 };
 
+TEST(SimplifyingNodeFactory_Exhaustive, unsigned_adjacent_comparison_bounds)
+{
+  Context c;
+  for (unsigned width : {1u, 2u, 3u, 4u, 5u, 6u})
+  {
+    SCOPED_TRACE(width);
+    const ASTNode x = c.bv(width), y = c.bv(width);
+    for (unsigned side : {0u, 1u})
+      for (bool constantFirst : {false, true})
+      {
+        SCOPED_TRACE(side);
+        SCOPED_TRACE(constantFirst);
+        const ASTNode offset = side == 0 ? c.mgr.CreateOneConst(width)
+                                         : c.mgr.CreateMaxConst(width);
+        const ASTNode plus = constantFirst
+                                 ? c.hf->CreateTerm(BVPLUS, width, offset, x)
+                                 : c.hf->CreateTerm(BVPLUS, width, x, offset);
+        const ASTVec operands = side == 0 ? ASTVec{plus, y} : ASTVec{y, plus};
+        c.checkNode(BVGT, operands);
+        c.checkNode(BVLE, operands);
+        c.checkNode(BVGE, {operands[1], operands[0]});
+        const ASTNode result = c.nf->CreateNode(BVGT, operands);
+        ASTVec todo{result};
+        ASTNodeSet seen;
+        while (!todo.empty())
+        {
+          const ASTNode n = todo.back();
+          todo.pop_back();
+          if (!seen.insert(n).second)
+            continue;
+          EXPECT_NE(n.GetKind(), BVPLUS) << result;
+          todo.insert(todo.end(), n.begin(), n.end());
+        }
+
+        // Other offsets and signed comparisons keep their own semantics.
+        c.checkNode(BVSGT, operands, false);
+        if (width > 1)
+        {
+          const ASTNode two = c.konst(2, width);
+          const ASTNode unrelated = c.hf->CreateTerm(BVPLUS, width, x, two);
+          c.checkNode(BVGT, {unrelated, y}, false);
+          c.checkNode(BVGT, {y, unrelated}, false);
+        }
+      }
+    if (width <= 3)
+    {
+      const ASTNode z = c.bv(width);
+      const ASTNode nary = c.hf->CreateTerm(
+          BVPLUS, width, ASTVec{x, c.mgr.CreateOneConst(width), y});
+      c.checkNode(BVGT, {nary, z}, false);
+      c.checkNode(BVGT, {z, nary}, false);
+    }
+  }
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive,
+     unsigned_adjacent_bounds_remove_wide_contradictions)
+{
+  Context c;
+  for (unsigned width : {2u, 32u, 65u, 20000u})
+  {
+    SCOPED_TRACE(width);
+    const ASTNode x = c.bv(width), y = c.bv(width);
+    const ASTNode successor =
+        c.nf->CreateTerm(BVPLUS, width, x, c.mgr.CreateOneConst(width));
+    const ASTNode predecessor =
+        c.nf->CreateTerm(BVPLUS, width, x, c.mgr.CreateMaxConst(width));
+    const ASTNode less = c.nf->CreateNode(BVGT, y, x);
+    const ASTNode greater = c.nf->CreateNode(BVGT, x, y);
+    EXPECT_EQ(c.nf->CreateNode(AND, less, c.nf->CreateNode(BVGT, successor, y)),
+              c.mgr.ASTFalse);
+    EXPECT_EQ(
+        c.nf->CreateNode(AND, greater, c.nf->CreateNode(BVGT, y, predecessor)),
+        c.mgr.ASTFalse);
+  }
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive,
+     unmatched_unsigned_comparisons_allocate_no_offset)
+{
+  for (unsigned width : {17u, 65u})
+    for (bool withConstant : {false, true})
+    {
+      SCOPED_TRACE(width);
+      SCOPED_TRACE(withConstant);
+      Context c;
+      const ASTNode x = c.bv(width), y = c.bv(width), z = c.bv(width);
+      const ASTNode other = withConstant ? c.konst(2, width) : y;
+      const ASTNode plus = c.hf->CreateTerm(BVPLUS, width, x, other);
+      const ASTNode comparison = c.nf->CreateNode(BVGT, plus, z);
+      ASSERT_EQ(comparison.GetKind(), BVGT);
+      const ASTNode one = c.mgr.CreateOneConst(width);
+      EXPECT_GT(one.GetNodeNum(), comparison.GetNodeNum());
+    }
+}
+
 /* The overflow predicates: a constant, identical or complemented operand
    turns the widened adder or multiplier into a comparison; bvusubo is bvult. */
 TEST(SimplifyingNodeFactory_Exhaustive, overflow_predicates)
