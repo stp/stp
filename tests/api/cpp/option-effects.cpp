@@ -1624,7 +1624,8 @@ TEST(OptionEffects, fp_batch_defaults_reach_native_and_parsed_encodings)
   {
     if (!has_sat_backend(backend))
       continue;
-    const auto settings = fp_batch_settings(std::string(backend) == "kissat");
+    const bool kissat = std::string(backend) == "kissat";
+    const auto settings = fp_batch_settings(kissat);
     Options expected;
     for (const auto& setting : settings)
       expected.set(setting.name, setting.value);
@@ -1649,11 +1650,21 @@ TEST(OptionEffects, fp_batch_defaults_reach_native_and_parsed_encodings)
             [&](std::string_view, CnfScope)
             {
               emitted = true;
-              for (const auto& setting : settings)
+              const auto& flags = flags_after(tm);
+              EXPECT_EQ(flags.cadical_factor,
+                        stp::UserDefinedFlags::BVAMode::OFF);
+              if (kissat)
               {
-                SCOPED_TRACE(setting.name);
-                EXPECT_EQ(solver.options().resolved(setting.name),
-                          expected.resolved(setting.name));
+                EXPECT_EQ(flags.search_bias, stp::SearchBias::SAT);
+                EXPECT_EQ(flags.kissat_stable, 2);
+                EXPECT_EQ(flags.sat_search_options.target, 0);
+                EXPECT_EQ(flags.sat_search_options.rephase, 0);
+                EXPECT_EQ(flags.cnf_effort,
+                          stp::UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM);
+                EXPECT_FALSE(flags.kissat_probe);
+                EXPECT_EQ(flags.kissat_trail_reuse_mode, 2);
+                EXPECT_EQ(flags.kissat_incremental_greedy, 2);
+                EXPECT_EQ(flags.kissat_greedy_growth, 1);
               }
             });
         ASSERT_TRUE(solver.check_sat().is_sat());
