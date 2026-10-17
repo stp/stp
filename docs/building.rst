@@ -294,7 +294,8 @@ Incremental Kissat is optional and off by default. Enable it with
 ``-DUSE_KISSAT=ON``; ``-DENABLE_AUTO_DOWNLOAD=ON`` fetches and builds a pinned
 commit on the ``stp`` branch of `stp/kissat <https://github.com/stp/kissat>`__.
 This fork supplies assumptions and repeated solving for STP's incremental
-driver and refinement loops. A prebuilt checkout can be chosen explicitly
+driver and refinement loops, and clause exchange with search
+diversification for ``stp-p``. A prebuilt checkout can be chosen explicitly
 with ``-DKISSAT_DIR=<path>``. See :doc:`kissat` for the API and build details.
 
 Every dependency is fetched and built by the build itself under

@@ -202,6 +202,12 @@ int run(int argc, char** argv, bool testing)
       ->check(CLI::IsMember(config_names(testing)));
   app.add_option("--stats-json", o.stats, "Write bounded answer-support statistics")
       ->check(not_empty);
+  app.add_option(
+         "--sat-backend", o.sat_backend,
+         "The SAT backend of every process: by default -j1 takes the "
+         "build's, the hedge CaDiCaL where built, and the group's roots "
+         "the first backend that exchanges clauses")
+      ->check(CLI::IsMember(stp::sat_backends()));
   app.add_flag("--encoding-groups", o.encoding_groups,
                "Opt in to independent default/GIA-high encodings for QF_BV; "
                "requires the default configuration and at least 4 jobs");
@@ -321,12 +327,21 @@ int run(int argc, char** argv, bool testing)
       if (config(o.config).route != Config::Route::Batch)
         throw std::runtime_error(
             "the group's base must be an ordinary-route configuration");
-      // The group needs CaDiCaL with STP's clause-import extension.
-      if (stp::capabilities()["sat.clause-exchange"] != "true")
+      // The group needs a backend that exchanges clauses: CaDiCaL with
+      // STP's clause-import extension, or Kissat with STP's clause exchange.
+      const auto exchanging = exchange_backends();
+      if (exchanging.empty())
         throw std::runtime_error(
             "-j greater than 1 needs a CaDiCaL with STP's clause-import "
-            "extension (this build's sat.clause-exchange capability is "
-            "false); -j1 still works");
+            "extension or a Kissat with STP's clause exchange (this build's "
+            "sat.clause-exchange capability is false); -j1 still works");
+      if (!o.sat_backend.empty() &&
+          std::find(exchanging.begin(), exchanging.end(), o.sat_backend) ==
+              exchanging.end())
+        throw std::runtime_error(
+            "-j greater than 1 needs a SAT backend that exchanges clauses, "
+            "which --sat-backend " +
+            o.sat_backend + " does not; -j1 still works");
     }
     else if (group_flags)
       throw std::runtime_error(

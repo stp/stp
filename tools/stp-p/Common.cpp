@@ -95,16 +95,23 @@ stp::Options solver_options(const Options& o, bool retained)
                     std::uint32_t(o.seed.value_or(0) + c.seed_offset));
   if (retained)
   {
-    // The hedge: the incremental driver from the first check, on CaDiCaL,
-    // which its configuration was chosen for; a build without CaDiCaL keeps
-    // its own default.
+    // The hedge: the incremental driver from the first check, on the
+    // backend --sat-backend names, or else on CaDiCaL, which its
+    // configuration was chosen for; a build without CaDiCaL keeps its own
+    // default.
     result.set("incremental", "on");
-    if (stp::has_sat_backend("cadical"))
+    if (!o.sat_backend.empty())
+      result.set("sat-backend", o.sat_backend);
+    else if (stp::has_sat_backend("cadical"))
       result.set("sat-backend", "cadical");
   }
   else
+  {
     for (const auto& [name, value] : c.options)
       result.set(name, value);
+    if (!o.sat_backend.empty())
+      result.set("sat-backend", o.sat_backend);
+  }
   return result;
 }
 void memory_limit(std::uint64_t mib)
@@ -186,6 +193,18 @@ std::vector<int> allowed_cpus()
     CPU_FREE(set);
     return cpus;
   }
+}
+std::vector<std::string> exchange_backends()
+{
+  std::vector<std::string> out;
+  const std::string list = stp::capabilities()["sat.clause-exchange.backends"];
+  for (std::size_t at = 0; at < list.size();)
+  {
+    const std::size_t comma = std::min(list.find(',', at), list.size());
+    out.push_back(list.substr(at, comma - at));
+    at = comma + 1;
+  }
+  return out;
 }
 unsigned default_jobs()
 {

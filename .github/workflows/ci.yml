@@ -888,6 +888,9 @@ jobs:
         key: ccache-${{ matrix.name }}/${{ github.run_id }}
         restore-keys: ccache-${{ matrix.name }}/
 
+    # STP_BUILD_PARALLEL builds stp-p, whose group runs on Kissat's clause
+    # exchange: alone, and beside CaDiCaL's clause import, where the parallel
+    # tests run once on each.
     - name: Configure
       run: |
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -896,6 +899,7 @@ jobs:
           -DENABLE_AUTO_DOWNLOAD=ON -DENABLE_TESTING=ON -DWERROR=ON \
           -DUSE_KISSAT=ON -DUSE_CADICAL=${{ matrix.cadical }} -DUSE_SATSUMA=ON \
           -DUSE_CRYPTOMINISAT=OFF -DUSE_MINISAT=OFF -DENABLE_PYTHON_API=OFF \
+          -DSTP_BUILD_PARALLEL=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
@@ -905,7 +909,12 @@ jobs:
     # CaDiCaL alongside it, the Kissat-specific unit and query tests also
     # verify both archives can be linked and used in the same process.
     - name: Test STP
-      run: ctest --test-dir build --parallel "$(nproc)" --output-on-failure
+      run: ctest --test-dir build --parallel "$(nproc)" --output-on-failure -LE parallel
+
+    # stp-p's tests start their own processes on up to four CPUs each, so
+    # they run one at a time, after everything else.
+    - name: Test stp-p
+      run: ctest --test-dir build -L parallel --output-on-failure
 
     - name: Test the pinned Kissat API with assertions
       if: matrix.name == 'kissat-only'

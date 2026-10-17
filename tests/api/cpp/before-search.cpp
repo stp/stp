@@ -49,13 +49,35 @@ using namespace stp;
 namespace
 {
 
-const bool exchange_available = capabilities()["sat.clause-exchange"] == "true";
+// The backend every check here runs on: STP_TEST_SAT_BACKEND's (CTest runs
+// these tests a second time on Kissat where both backends exchange
+// clauses), or else CaDiCaL where it is built, or else the build's default.
+std::string test_backend()
+{
+  const char* named = std::getenv("STP_TEST_SAT_BACKEND");
+  if (named && *named)
+    return named;
+  if (has_sat_backend("cadical"))
+    return "cadical";
+  return sat_backends().size() == 1 ? sat_backends().front() : "";
+}
+
+// Whether that backend exchanges clauses (and diversifies its search).
+bool backend_exchanges()
+{
+  const std::string list =
+      "," + capabilities()["sat.clause-exchange.backends"] + ",";
+  const std::string backend = test_backend();
+  return !backend.empty() &&
+         list.find("," + backend + ",") != std::string::npos;
+}
+const bool exchange_available = backend_exchanges();
 
 Options batch_options()
 {
   Options o;
-  if (has_sat_backend("cadical"))
-    o.set("sat-backend", "cadical");
+  if (!test_backend().empty())
+    o.set("sat-backend", test_backend());
   return o;
 }
 
@@ -316,7 +338,7 @@ TEST(BeforeSearch, AnArithmeticHookKeepsItsCoordinatorsCallback)
   const long hooked = run(true, calls, outcome);
   EXPECT_EQ(outcome, "offered");
   EXPECT_EQ(calls, 1u);
-  if (sat_backends() == std::vector<std::string>{"kissat"})
+  if (test_backend() == "kissat")
     EXPECT_EQ(plain, 0); // Kissat runs arithmetic on complete assignments.
   else
     EXPECT_GE(plain, 1);
@@ -366,6 +388,10 @@ TEST(BeforeSearch, ArithmeticRerouteKeepsDiversificationWithoutRepeatingTheHook)
 {
   if (!exchange_available)
     GTEST_SKIP() << "the backend has no search diversification";
+  // The reroute follows a partial theory check, which needs the arithmetic
+  // propagator in the search; Kissat checks complete assignments only.
+  if (test_backend() == "kissat")
+    GTEST_SKIP() << "the backend does not host the arithmetic propagator";
   const auto path = std::filesystem::path(STP_TEST_QUERY_DIR) /
                     "lra-float-reroute-preserves-answer.smt2";
   std::ifstream input(path);
@@ -603,7 +629,7 @@ TEST(BeforeSearch, AnExchangeReplacedOrDisconnectedInTheHookCountsNothing)
   // A hook may connect one exchange and then another, or none: the one
   // connected when the search starts is the only one the backend uses.
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   TermManager tm;
   Solver s(tm, batch_options());
   s.parse_smt2(factoring(unsat_n));
@@ -633,7 +659,7 @@ TEST(BeforeSearch, ClausesThatCannotBeImportedAreDroppedAndTheAnswerStands)
   // exchange's variables are dropped and counted; next() appends to what it
   // is handed, so each clause starts from an empty vector.
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   struct Junk final : ClauseExchange
   {
     std::vector<std::vector<int>> clauses{
@@ -697,7 +723,7 @@ TEST(BeforeSearch, AScriptsChecksRefuseAPendingHookAndLeaveIt)
 TEST(BeforeSearch, ExchangeCountersDescribeTheLastCheck)
 {
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   TermManager tm;
   Solver s(tm, batch_options());
   s.parse_smt2(factoring(unsat_n));
@@ -717,7 +743,7 @@ TEST(BeforeSearch, ExchangeCountersDescribeTheLastCheck)
 TEST(BeforeSearch, AnImportPollAnnouncesTheBackendsCapWithoutABudget)
 {
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   TermManager tm;
   Solver s(tm, batch_options());
   s.parse_smt2(factoring(unsat_n));
@@ -884,7 +910,7 @@ std::vector<std::vector<int>> parse_clauses(const std::string& text)
 TEST(BeforeSearch, ClausesOneCopyLearnsImportIntoAnother)
 {
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   // Both copies are forked at the same point, so they share the backend's
   // numbering: the first exports only, and is waited for; the second then
   // imports what the first learned, two clauses every eight conflicts, so

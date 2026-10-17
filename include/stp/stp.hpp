@@ -1204,8 +1204,8 @@ public:
   std::uint64_t variables() const;
   /// Connect `exchange` (not owned; nullptr disconnects) to this check's
   /// backend, exporting only clauses over the variables it holds now. false
-  /// when the backend cannot exchange clauses (CaDiCaL without STP's
-  /// clause-import extension). Arithmetic-only refinement is supported.
+  /// when the backend cannot exchange clauses (one without STP's extension:
+  /// CaDiCaL's clause import or Kissat's clause exchange). Arithmetic-only refinement is supported.
   /// A backend rebuild stops sharing because its variable numbering is
   /// private. The closing counters are the solver's sat.exchange.* statistics.
   bool connect_clause_exchange(ClauseExchange* exchange,

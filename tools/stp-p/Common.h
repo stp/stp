@@ -70,6 +70,10 @@ struct Options
   // A portfolio's ordinary side takes QF_BV only (not an option).
   bool strict_logic = false;
   std::string config = "default"; // see Portfolio.cpp
+  // --sat-backend: every process's SAT backend. Empty: -j1 and a race's
+  // sides take the build's default, the hedge CaDiCaL where it is built,
+  // and the group's roots the first backend that exchanges clauses.
+  std::string sat_backend;
   std::vector<std::string> portfolio; // race sides; empty: no race
   // The group (-jN, N > 1): `roots` batch roots forked at ordinary STP's
   // before-search point (root 0 ordinary STP on CaDiCaL, the rest
@@ -122,8 +126,11 @@ bool injected_hold(const Options&, unsigned slot); // hold-root=SLOT
 // The CPUs this process may run on, however many the system has.
 std::vector<int> allowed_cpus();
 // -j when it is absent: the allowed CPUs, at most eight, where the group can
-// run; 1 on a build without the clause-import extension.
+// run; 1 on a build with no backend that exchanges clauses.
 unsigned default_jobs();
+// The backends that exchange clauses, CaDiCaL first (capabilities()'s
+// sat.clause-exchange.backends).
+std::vector<std::string> exchange_backends();
 // An error that ends the whole invocation, whatever another side answers
 // (two complete answers that disagree), with the evidence for the stats.
 struct Failure : std::runtime_error

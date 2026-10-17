@@ -284,6 +284,28 @@ a 250 ms soft allowance, sharing cancellation and the enclosing deadline;
 individual propagation calls can exceed that allowance. Explicit conflict
 budgets bypass the attempt. ``-s`` prints the effective settings.
 
+Clause exchange
+---------------
+
+``stp-p``'s group (:doc:`parallel-solving`) can run on Kissat: the fork lets
+copies of one loaded solver exchange learned clauses and diversify their
+search. ``kissat_set_learn`` passes every clause conflict analysis learns,
+up to a size limit, and every unit derived at the root to a callback, in
+external literals; clauses over factoring's variables stay private.
+``kissat_set_import`` polls a callback in the search, between propagation
+and the next decision, every given number of conflicts, and adds each
+clause as a redundant one after backtracking as far as watching it needs.
+A clause over an eliminated, substituted, unused or factoring variable is
+dropped rather than restored. ``kissat_diversify`` sets the seed, the saved
+phases and, optionally, a shuffled decision order and scores; the search
+mode remains the ``stable`` option, which the first search reads.
+
+The STP adapter connects these at the before-search point. Its cutoff is
+the number of variables STP allocated by then: STP variable *v* is
+external variable *v* + 1 until the search starts, and factoring numbers
+its variables above that. ``capabilities()`` lists Kissat in
+``sat.clause-exchange.backends`` when the library has the extension.
+
 Testing
 -------
 
@@ -302,8 +324,7 @@ Current scope
 -------------
 
 The backend implements the incremental SAT contract needed for refinement.
-It does not expose theory propagation callbacks, clause exchange, or search
-reset. STP uses its existing
-fallbacks for optional backend capabilities. Restoring the entire extension
+It does not expose theory propagation callbacks or search reset. STP uses
+its existing fallbacks for optional backend capabilities. Restoring the entire extension
 can cost more than restoring only the variables a new clause needs.
 Incremental proof output is outside the scope of this port.

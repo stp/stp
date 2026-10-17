@@ -1176,12 +1176,15 @@ if(USE_KISSAT)
     endif()
 endif()
 
-# stp-p's group needs CaDiCaL with STP's clause-import extension; without it
-# the tool still builds, and refuses -j greater than 1.
-if(STP_BUILD_PARALLEL AND NOT CADICAL_HAS_CLAUSE_IMPORT)
-    message(WARNING "STP_BUILD_PARALLEL is ON, but this build's CaDiCaL has no "
-                    "clause-import extension (none, a 2.x, or one found without "
-                    "STP's patch): stp-p will refuse -j greater than 1")
+# stp-p's group needs a backend that exchanges clauses: CaDiCaL with STP's
+# clause-import extension, or Kissat with STP's clause exchange. Without
+# either the tool still builds, and refuses -j greater than 1.
+if(STP_BUILD_PARALLEL AND NOT CADICAL_HAS_CLAUSE_IMPORT
+   AND NOT (USE_KISSAT AND KISSAT_HAS_CLAUSE_EXCHANGE))
+    message(WARNING "STP_BUILD_PARALLEL is ON, but no SAT backend of this build "
+                    "exchanges clauses (a CaDiCaL without STP's clause-import "
+                    "extension, and no Kissat with STP's clause exchange): "
+                    "stp-p will refuse -j greater than 1")
 endif()
 
 # -----------------------------------------------------------------------------
