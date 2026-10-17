@@ -482,7 +482,10 @@ TEST(OptionEffects, cadical_abv_batch_tuning_reaches_the_first_encoding)
           emitted = true;
           const auto& flags = flags_after(tm);
           EXPECT_EQ(flags.search_bias, stp::SearchBias::UNSAT);
-          EXPECT_EQ(flags.cnf_effort, Flags::CNF_EFFORT_AUTO);
+          // This small complete encoding resolves AUTO before emission.
+          // The public option below must still describe the AUTO policy.
+          EXPECT_EQ(flags.cnf_effort, Flags::CNF_EFFORT_GIA_LOW);
+          EXPECT_EQ(flags.cnf_auto_threshold, 200000u);
           EXPECT_EQ(flags.cadical_factor, Flags::BVAMode::OFF);
           EXPECT_EQ(flags.array_late_read_limit, 1024);
           EXPECT_EQ(flags.array_late_expansion_limit, 100000u);
