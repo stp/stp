@@ -326,6 +326,18 @@ void Kissat::setImportOrder(int order)
   import_order = order;
 }
 
+void Kissat::setOneShotSearchMode(int mode)
+{
+  requireHealthy();
+  if (!configurationOpen() || solve_calls || one_shot)
+    throw std::logic_error(
+        "select the Kissat search mode before one-shot configuration");
+  if (mode < -1 || mode > 2)
+    throw std::invalid_argument(
+        "Kissat one-shot search mode outside its range");
+  one_shot_search_mode = mode;
+}
+
 void Kissat::requireHealthy() const
 {
   if (allocations->owner.failed)
@@ -578,8 +590,10 @@ bool Kissat::setSearchBiasInternal(SearchBias bias)
                                                    : "default";
   const bool supported = kissat_set_configuration(solver, config);
   kissat_set_option(solver, "incremental", one_shot ? 0 : 1);
-  if (search_mode >= 0)
-    kissat_set_option(solver, "stable", search_mode);
+  const int mode = one_shot && one_shot_search_mode >= 0 ? one_shot_search_mode
+                                                         : search_mode;
+  if (mode >= 0)
+    kissat_set_option(solver, "stable", mode);
   return supported;
 }
 
@@ -598,6 +612,8 @@ bool Kissat::configureOneShot()
   kissat_set_option(solver, "incremental", 0);
   kissat_set_option(solver, "incrementalreuse", 0);
   one_shot = true;
+  if (one_shot_search_mode >= 0)
+    kissat_set_option(solver, "stable", one_shot_search_mode);
   lucky_probe.reset();
   return true;
 }

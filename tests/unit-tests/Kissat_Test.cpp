@@ -357,6 +357,76 @@ TEST(Kissat, OneShotConfigurationRequiresAnEmptyBackend)
   EXPECT_TRUE(solver.supportsAssumptions());
 }
 
+TEST(Kissat, OneShotSearchModeKeepsItsModeAndModelAcrossBiasChanges)
+{
+  for (int mode : {-1, 0, 1, 2})
+  {
+    SCOPED_TRACE(mode);
+    stp::Kissat solver(true, 1);
+    solver.setOneShotSearchMode(mode);
+    ASSERT_TRUE(solver.setSearchBias(stp::SearchBias::UNSAT));
+    ASSERT_TRUE(solver.configureOneShot());
+    ASSERT_TRUE(solver.setSearchBias(stp::SearchBias::SAT));
+    testing::internal::CaptureStderr();
+    solver.printStats();
+    const std::string stats = testing::internal::GetCapturedStderr();
+    EXPECT_NE(
+        stats.find(" stable=" + std::to_string(mode < 0 ? 1 : mode) + " "),
+        std::string::npos);
+    EXPECT_FALSE(solver.supportsAssumptions());
+    const auto x = solver.newVar(), y = solver.newVar();
+    solver.setFrozen(x);
+    solver.setFrozen(y);
+    ASSERT_TRUE(solver.addClause(
+        clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+    ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(x, true)})));
+    bool timeout = false;
+    ASSERT_TRUE(solver.solve(timeout));
+    EXPECT_FALSE(timeout);
+    EXPECT_EQ(solver.false_literal(), solver.modelValue(x));
+    EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+  }
+}
+
+TEST(Kissat, OneShotSearchModeLeavesIncrementalModelsAndAssumptionsAlone)
+{
+  stp::Kissat solver(true, 2);
+  solver.setOneShotSearchMode(0);
+  const auto x = solver.newVar(), y = solver.newVar();
+  ASSERT_TRUE(solver.addClause(
+      clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+  bool timeout = false;
+  ASSERT_TRUE(solver.solveWithAssumptions(clause({SATSolver::mkLit(x, true)}),
+                                          timeout));
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+  const auto conflict =
+      clause({SATSolver::mkLit(x, true), SATSolver::mkLit(y, true)});
+  ASSERT_FALSE(solver.solveWithAssumptions(conflict, timeout));
+  EXPECT_TRUE(solver.okay());
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_TRUE(solver.supportsAssumptions());
+  testing::internal::CaptureStderr();
+  solver.printStats();
+  const std::string stats = testing::internal::GetCapturedStderr();
+  EXPECT_NE(stats.find(" stable=2 "), std::string::npos);
+  EXPECT_FALSE(timeout);
+}
+
+TEST(Kissat, OneShotSearchModeRejectsInvalidAndLateChoices)
+{
+  stp::Kissat solver;
+  EXPECT_THROW(solver.setOneShotSearchMode(-2), std::invalid_argument);
+  EXPECT_THROW(solver.setOneShotSearchMode(3), std::invalid_argument);
+  solver.setOneShotSearchMode(0);
+  solver.setOneShotSearchMode(-1);
+  ASSERT_TRUE(solver.configureOneShot());
+  EXPECT_THROW(solver.setOneShotSearchMode(1), std::logic_error);
+  stp::Kissat loaded;
+  const auto x = loaded.newVar();
+  ASSERT_TRUE(loaded.addClause(clause({SATSolver::mkLit(x, false)})));
+  EXPECT_THROW(loaded.setOneShotSearchMode(0), std::logic_error);
+}
+
 TEST(Kissat, EliminationControlSurvivesSearchBiasAndIncrementalSolves)
 {
   for (int elimination : {-1, 0, 1})
