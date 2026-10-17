@@ -20,7 +20,7 @@
 ;
 ; REQUIRES: kissat
 ; RUN: %solver --kissat --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=AUTO %s
-; RUN: %solver --kissat --sat-phase=-1 --cnf-generation-effort=new-medium --kissat-adaptive-cnf=false --kissat-import-order=0 --kissat-incremental-greedy=0 --kissat-batch-only=false --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
+; RUN: %solver --kissat --sat-phase=-1 --cnf-generation-effort=new-medium --kissat-adaptive-cnf=false --kissat-import-order=0 --kissat-incremental-greedy=0 --kissat-batch-only=false --bv-conditional-equality=false --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
 ; RUN: %solver --kissat --search-bias=none --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=BIAS %s
 ; RUN: %solver --kissat --sat-tuning=off --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ; AUTO: ^SAT tuning: backend=kissat logic=QF_BV session=batch profile=kissat-qf-bv-batch$
@@ -30,6 +30,7 @@
 ; AUTO: ^SAT tuning: kissat-import-order=2 \(automatic\)$
 ; AUTO: ^SAT tuning: kissat-incremental-greedy=4 \(automatic\)$
 ; AUTO: ^SAT tuning: kissat-batch-only=true \(automatic\)$
+; AUTO: ^SAT tuning: bv-conditional-equality=true \(automatic\)$
 ; AUTO: ^sat$
 ; EXPLICIT: ^SAT tuning: sat-phase=-1 \(explicit\)$
 ; EXPLICIT: ^SAT tuning: cnf-generation-effort=new-medium \(explicit\)$
@@ -37,8 +38,10 @@
 ; EXPLICIT: ^SAT tuning: kissat-import-order=0 \(explicit\)$
 ; EXPLICIT: ^SAT tuning: kissat-incremental-greedy=0 \(explicit\)$
 ; EXPLICIT: ^SAT tuning: kissat-batch-only=false \(explicit\)$
+; EXPLICIT: ^SAT tuning: bv-conditional-equality=false \(explicit\)$
 ; EXPLICIT: ^sat$
 ; BIAS: ^SAT tuning: sat-phase=-1 \(user configuration\)$
+; BIAS: ^SAT tuning: bv-conditional-equality=true \(automatic\)$
 ; BIAS: ^sat$
 ; OFF: ^SAT tuning: backend=kissat logic=QF_BV session=batch profile=off$
 ; OFF: ^sat$

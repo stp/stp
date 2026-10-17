@@ -67,11 +67,10 @@ struct TuningSetting
 std::vector<TuningSetting> bv_batch_settings(bool kissat)
 {
   std::vector<TuningSetting> settings{{"sat-phase", "0"}};
-  const TuningSetting extras[] = {{"cnf-generation-effort", "auto"},
-                                  {"kissat-adaptive-cnf", "true"},
-                                  {"kissat-import-order", "2"},
-                                  {"kissat-incremental-greedy", "4"},
-                                  {"kissat-batch-only", "true"}};
+  const TuningSetting extras[] = {
+      {"cnf-generation-effort", "auto"}, {"kissat-adaptive-cnf", "true"},
+      {"kissat-import-order", "2"},      {"kissat-incremental-greedy", "4"},
+      {"kissat-batch-only", "true"},     {"bv-conditional-equality", "true"}};
   if (kissat)
     for (const auto& setting : extras)
       settings.push_back(setting);
@@ -1263,6 +1262,7 @@ TEST(OptionEffects, bv_batch_defaults_reach_native_and_parsed_encodings)
               EXPECT_EQ(flags.kissat_import_order, kissat ? 2 : 0);
               EXPECT_EQ(flags.kissat_incremental_greedy, kissat ? 4 : 0);
               EXPECT_EQ(flags.kissat_one_shot_stable, -1);
+              EXPECT_EQ(flags.enable_conditional_equality, kissat);
             });
         ASSERT_TRUE(solver.check_sat().is_sat());
         EXPECT_TRUE(emitted);
@@ -1362,6 +1362,7 @@ TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
       EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
       EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
       EXPECT_EQ(flags_after(tm).kissat_batch_only, kissat);
+      EXPECT_EQ(flags_after(tm).enable_conditional_equality, kissat);
       if (parsed)
         solver.parse_smt2("(push 1)");
       else
@@ -1378,6 +1379,7 @@ TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
       EXPECT_FALSE(flags_after(tm).kissat_adaptive_cnf);
       EXPECT_EQ(flags_after(tm).kissat_import_order, 0);
       EXPECT_EQ(flags_after(tm).kissat_incremental_greedy, 0);
+      EXPECT_FALSE(flags_after(tm).enable_conditional_equality);
       if (parsed)
         solver.parse_smt2("(pop 1)");
       else
@@ -1502,5 +1504,78 @@ TEST(OptionEffects, kissat_bv_batch_defaults_preserve_closed_option_windows)
                                scalar_option_text(baseline.get(setting.name))));
       EXPECT_EQ(solver.options().resolved(setting.name), before);
       EXPECT_FALSE(solver.options().is_set(setting.name));
+    }
+}
+
+TEST(OptionEffects, bv_batch_conditional_default_rewrites_prebuilt_definitions)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager::Config config;
+    config.simplify = false;
+    TermManager tm(config);
+    const Term condition = tm.declare("auto_conditional_c", tm.mk_bool_sort());
+    const Sort word = tm.mk_bv_sort(8);
+    const Term x = tm.declare("auto_conditional_x", word);
+    const Term a = tm.declare("auto_conditional_a", word);
+    const Term b = tm.declare("auto_conditional_b", word);
+    const Term definition = ite(condition, x == a, x == b);
+    const Term opposite = x != ite(condition, a, b);
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_bool("check-sanity", true);
+    if (!parsed)
+      options.set_str("logic", "QF_BV");
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-logic QF_BV)");
+    solver.add(definition && opposite);
+    bool emitted = false;
+    solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
+    ASSERT_TRUE(solver.check_sat().is_unsat());
+    EXPECT_FALSE(emitted);
+    EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+    EXPECT_FALSE(solver.options().is_set("bv-conditional-equality"));
+    EXPECT_FALSE(solver.options().get_bool("bv-conditional-equality"));
+    EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
+              OptionValue(true));
+  }
+}
+
+TEST(OptionEffects, bv_batch_defaults_preserve_explicit_composite_settings)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool parsed : {false, true})
+    for (const bool disabled : {false, true})
+    {
+      SCOPED_TRACE(parsed);
+      SCOPED_TRACE(disabled);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", "kissat");
+      options.set_bool("check-sanity", true);
+      if (!parsed)
+      {
+        options.set_str("logic", "QF_BV");
+        options.set_bool("disable-simplifications", disabled);
+      }
+      Solver solver(tm, options);
+      if (parsed)
+        solver.parse_smt2(
+            std::string(
+                "(set-logic QF_BV)(set-option :disable-simplifications ") +
+            (disabled ? "true)" : "false)"));
+      const Term x = tm.declare("auto_composite_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_EQ(flags_after(tm).enable_conditional_equality, !disabled);
+      EXPECT_FALSE(solver.options().is_set("bv-conditional-equality"));
+      EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
+                OptionValue(!disabled));
+      EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
     }
 }

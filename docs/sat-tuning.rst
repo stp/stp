@@ -27,7 +27,8 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Batch
       - ``sat-phase=0``, ``cnf-generation-effort=auto``,
         ``kissat-adaptive-cnf=true``, ``kissat-import-order=2``,
-        ``kissat-incremental-greedy=4``, ``kissat-batch-only=true``
+        ``kissat-incremental-greedy=4``, ``kissat-batch-only=true``,
+        ``bv-conditional-equality=true``
     * - CaDiCaL
       - QF_BV
       - Batch
@@ -88,6 +89,8 @@ mode. Its late array expansion and congruence settings have explicit budgets.
 The QF_BV batch profile also requests complete one-shot encodings while
 retaining the ordinary search mode. Its greedy setting applies to calls
 that retain native incremental solving.
+It also lifts conditional definitions of bit-vector symbols. An explicit
+``disable-simplifications`` keeps this rewrite disabled.
 The CaDiCaL QF_ABV batch profile uses
 ``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
 for its cut-reference walks, fixing the stack overflow on wide

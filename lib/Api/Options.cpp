@@ -1496,11 +1496,24 @@ void derive_options(const OptionsImpl& o, DerivedOptions& d,
     const OptionSpec& spec = kOptionSpecs[i];
     d.resolved.push_back(o.resolved(i));
     const OptionValue& r = d.resolved.back();
+    // An explicit composite owns its implied value, including a value equal
+    // to the registry default, before automatic tuning supplies defaults.
+    const bool from_composite =
+        std::any_of(index.composites[i].begin(), index.composites[i].end(),
+                    [&](const auto& implied)
+                    {
+                      const std::size_t source = implied.first;
+                      return o.is_set[source] &&
+                             o.values[source].index() == 0 &&
+                             std::get<bool>(o.values[source]);
+                    });
     // printing a value is the test; an entry holding its default value (most
     // of them) prints as the default printed, which is known
     d.at_default[i] =
-        !o.is_set[i] && (r == index.defaults[i] ? static_cast<bool>(index.default_prints_as_default[i])
-                                                : option_text(spec, r) == spec.default_text);
+        !o.is_set[i] && !from_composite &&
+        (r == index.defaults[i]
+             ? static_cast<bool>(index.default_prints_as_default[i])
+             : option_text(spec, r) == spec.default_text);
   }
   if (tuning != nullptr)
     apply_sat_tuning_defaults(o, *tuning, d);
@@ -1578,7 +1591,8 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
                            "array-late-expansion-limit",
                            "array-late-congruence-limit",
                            "array-equality-gia-cnf",
-                           "array-equality-gia-min-reads"})
+                           "array-equality-gia-min-reads",
+                           "bv-conditional-equality"})
   {
     const OptionSpec& spec = *find_option(name);
     const std::size_t index = option_index(&spec);
