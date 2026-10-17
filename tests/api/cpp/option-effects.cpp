@@ -1804,10 +1804,15 @@ TEST(OptionEffects, fp_batch_defaults_respect_opt_out_and_named_search)
              {"sat-phase", "sat-rephase", "sat-target", "kissat-stable"})
           EXPECT_EQ(solver.options().resolved(name), options.resolved(name));
         if (off)
+        {
           for (const auto& setting :
                fp_batch_settings(std::string(backend) == "kissat"))
+          {
+            SCOPED_TRACE(setting.name);
             EXPECT_EQ(solver.options().resolved(setting.name),
                       baseline.get(setting.name));
+          }
+        }
       }
   }
 }
