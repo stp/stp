@@ -15,6 +15,14 @@ Linux, a build makes it whenever ``help2man`` is available.
 ``stp --version`` prints the version, the commit it was built from, the
 build configuration and the SAT solvers compiled in.
 
+``--bv-adjacent-bounds=true`` enables an experimental word-level rewrite for
+unsigned successor and predecessor comparisons. It replaces ``(x + 1) > y``
+with ``x != ones && x >= y``, and ``y > (x - 1)`` with
+``x != zero && y >= x``. The guards retain modular wraparound semantics.
+It applies to every SAT backend and is disabled by default because the
+encoding change can help or hurt SAT search. Set it before the first check;
+the SMT-LIB spelling is ``(set-option :bv-adjacent-bounds true)``.
+
 Input
 -----
 

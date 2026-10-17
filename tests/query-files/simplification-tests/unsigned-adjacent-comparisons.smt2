@@ -19,8 +19,9 @@
 ; THE SOFTWARE.
 ;
 ; Adjacent unsigned bounds retain their wrap guards through push/pop.
-; RUN: %solver --check-sanity %s | %OutputCheck %s
-; RUN: %solver --check-sanity --incremental %s | %OutputCheck %s
+; RUN: %solver --bv-adjacent-bounds=true --check-sanity %s | %OutputCheck %s
+; RUN: %solver --bv-adjacent-bounds=true --check-sanity --incremental %s | %OutputCheck %s
+; RUN: %solver --bv-adjacent-bounds=false --check-sanity %s | %OutputCheck %s
 ; CHECK: ^unsat$
 ; CHECK-NEXT: ^unsat$
 ; CHECK-NEXT: ^sat$

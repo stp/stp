@@ -50,13 +50,14 @@ struct Context
   NodeFactory* hf; // hashing factory: builds inputs without simplifying.
   unsigned counter = 0;
 
-  Context() : snf(*(mgr.hashingNodeFactory), mgr)
+  Context(bool adjacent_bounds = false) : snf(*(mgr.hashingNodeFactory), mgr)
   {
     static const bool booted = []() {
       CONSTANTBV::BitVector_Boot();
       return true;
     }();
     (void)booted;
+    mgr.UserFlags.enable_adjacent_bounds = adjacent_bounds;
 
     mgr.defaultNodeFactory = &snf;
     nf = &snf;
@@ -170,7 +171,7 @@ struct Context
 
 TEST(SimplifyingNodeFactory_Exhaustive, unsigned_adjacent_comparison_bounds)
 {
-  Context c;
+  Context c(true);
   for (unsigned width : {1u, 2u, 3u, 4u, 5u, 6u})
   {
     SCOPED_TRACE(width);
@@ -223,10 +224,28 @@ TEST(SimplifyingNodeFactory_Exhaustive, unsigned_adjacent_comparison_bounds)
   }
 }
 
+TEST(SimplifyingNodeFactory_Exhaustive, unsigned_adjacent_bounds_are_opt_in)
+{
+  const UserDefinedFlags defaults;
+  EXPECT_FALSE(defaults.enable_adjacent_bounds);
+  Context c;
+  const unsigned width = 8;
+  const ASTNode x = c.bv(width), y = c.bv(width);
+  const ASTNode sum =
+      c.hf->CreateTerm(BVPLUS, width, x, c.mgr.CreateOneConst(width));
+  const ASTNode plain = c.hf->CreateNode(BVGT, sum, y);
+  EXPECT_FALSE(c.mgr.UserFlags.enable_adjacent_bounds);
+  EXPECT_EQ(c.nf->CreateNode(BVGT, sum, y), plain);
+  c.mgr.UserFlags.enable_adjacent_bounds = true;
+  const ASTNode rewritten = c.nf->CreateNode(BVGT, sum, y);
+  EXPECT_NE(rewritten, plain);
+  c.checkEquivalent(plain, rewritten);
+}
+
 TEST(SimplifyingNodeFactory_Exhaustive,
      unsigned_adjacent_bounds_remove_wide_contradictions)
 {
-  Context c;
+  Context c(true);
   for (unsigned width : {2u, 32u, 65u, 20000u})
   {
     SCOPED_TRACE(width);
@@ -253,7 +272,7 @@ TEST(SimplifyingNodeFactory_Exhaustive,
     {
       SCOPED_TRACE(width);
       SCOPED_TRACE(withConstant);
-      Context c;
+      Context c(true);
       const ASTNode x = c.bv(width), y = c.bv(width), z = c.bv(width);
       const ASTNode other = withConstant ? c.konst(2, width) : y;
       const ASTNode plus = c.hf->CreateTerm(BVPLUS, width, x, other);

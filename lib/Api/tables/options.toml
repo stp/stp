@@ -450,8 +450,8 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "disable_simplifications" }
 category = "simplification"
-implies = { "switch-word" = true, "disable-opt-inc" = true, "disable-cbitp" = true, "disable-equality" = true, "unconstrained-variable-elimination" = false, "flattening" = false, "rewriting" = false, "split-extracts" = false, "ite-context-simplifications" = false, "use-intervals" = false, "pure-literals" = false, "common-subsum" = false, "common-factor" = false, "pair-extract" = false, "merge-same" = false, "distinct-ordering" = false, "linear-form" = false }
-excludes = ["switch-word", "disable-opt-inc", "disable-cbitp", "disable-equality", "unconstrained-variable-elimination", "flattening", "rewriting", "split-extracts", "ite-context-simplifications", "use-intervals", "pure-literals", "common-subsum", "common-factor", "pair-extract", "merge-same", "distinct-ordering", "linear-form"]
+implies = { "switch-word" = true, "disable-opt-inc" = true, "disable-cbitp" = true, "disable-equality" = true, "unconstrained-variable-elimination" = false, "flattening" = false, "rewriting" = false, "split-extracts" = false, "ite-context-simplifications" = false, "use-intervals" = false, "pure-literals" = false, "common-subsum" = false, "common-factor" = false, "pair-extract" = false, "merge-same" = false, "distinct-ordering" = false, "linear-form" = false, "bv-adjacent-bounds" = false }
+excludes = ["switch-word", "disable-opt-inc", "disable-cbitp", "disable-equality", "unconstrained-variable-elimination", "flattening", "rewriting", "split-extracts", "ite-context-simplifications", "use-intervals", "pure-literals", "common-subsum", "common-factor", "pair-extract", "merge-same", "distinct-ordering", "linear-form", "bv-adjacent-bounds"]
 help = "disable all simplifications"
 
 [[option]]
@@ -693,6 +693,18 @@ scope = "solver"
 engine = { field = "enable_linear_form" }
 category = "simplification"
 help = "Rewrite every bit-vector term into a canonical linear combination of its non-linear sub-terms, so that two equal combinations spelled differently become one node and share the circuit built on them rather than each blasting their own"
+
+[[option]]
+name = "bv-adjacent-bounds"
+type = "bool"
+cli_form = "flag"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "enable_adjacent_bounds" }
+category = "simplification"
+help = "Rewrite unsigned successor and predecessor comparisons into guarded bounds; the encoding changes can help or hurt SAT search"
 
 [[option]]
 name = "linear-form-addend-limit"
