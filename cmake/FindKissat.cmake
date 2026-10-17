@@ -4,7 +4,7 @@ include(deps-helper)
 
 set(KISSAT_DIR "" CACHE PATH
     "Incremental Kissat checkout containing src/kissat.h and build/libkissat.a")
-set(_kissat_default_tag "f8c5fcef2f8aaf3456aec596f5864e877c9773fd")
+set(_kissat_default_tag "7db70ec5a5f3fd86c5c6fc773ea841ab72dfb4f0")
 if(NOT DEFINED CACHE{Kissat_TAG}
    OR "$CACHE{Kissat_TAG}" STREQUAL "$CACHE{_STP_Kissat_TAG_DEFAULT}")
     set(Kissat_TAG "${_kissat_default_tag}" CACHE STRING
