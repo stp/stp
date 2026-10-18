@@ -25,7 +25,20 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
     * - Kissat
       - QF_BV
       - Batch
-      - ``sat-phase=0``, ``cnf-generation-effort=new-medium``
+      - ``sat-phase=0``, ``cnf-generation-effort=auto``,
+        ``kissat-adaptive-cnf=true``, ``kissat-import-order=2``,
+        ``kissat-incremental-greedy=4``, ``kissat-batch-only=true``,
+        ``bv-conditional-equality=true``, ``bv-double-equality=true``
+    * - CaDiCaL
+      - QF_BV
+      - Batch
+      - ``sat-phase=0``, ``bv-conditional-equality=true``,
+        ``bv-double-equality=true``
+    * - Kissat
+      - QF_FP
+      - Batch
+      - ``kissat-adaptive-cnf=true``, ``kissat-import-order=2``,
+        ``kissat-incremental-greedy=2``
     * - CaDiCaL
       - QF_BV
       - Incremental
@@ -38,8 +51,20 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
     * - CaDiCaL
       - QF_ABV
       - Batch
-      - ``search-bias=unsat``, ``cnf-generation-effort=gia-low``,
-        ``cadical-factor=off``
+      - ``search-bias=unsat``, ``cnf-generation-effort=auto``,
+        ``cadical-factor=off``, ``array-late-read-limit=1024``,
+        ``array-late-expansion-limit=100000``,
+        ``array-late-congruence-limit=16000``,
+        ``array-equality-gia-cnf=true``, ``array-equality-gia-min-reads=16``
+    * - Kissat
+      - QF_ABV
+      - Batch
+      - ``kissat-factor=off``, ``kissat-batch-only=true``,
+        ``kissat-one-shot-stable=0``, ``cnf-auto-threshold=0``,
+        ``array-late-read-limit=1024``,
+        ``array-late-expansion-limit=100000``,
+        ``array-late-congruence-limit=16000``,
+        ``array-equality-gia-cnf=true``, ``array-equality-gia-min-reads=16``
     * - CaDiCaL
       - QF_ABV
       - Incremental
@@ -57,6 +82,18 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - The AUTO incremental settings above, plus
         ``kissat-trail-reuse-mode=2``
     * - CaDiCaL
+      - QF_BVFP, QF_ABVFP
+      - Batch
+      - ``cadical-factor=off``
+    * - Kissat
+      - QF_BVFP, QF_ABVFP
+      - Batch
+      - ``search-bias=sat``, ``kissat-stable=2``, ``sat-target=0``,
+        ``sat-rephase=0``, ``cnf-generation-effort=new-medium``,
+        ``kissat-probe=false``, ``kissat-factor=off``,
+        ``kissat-trail-reuse-mode=2``, ``kissat-incremental-greedy=2``,
+        ``kissat-greedy-growth=1``
+    * - CaDiCaL
       - QF_ABVFP
       - Forced incremental
       - ``search-bias=sat``, ``sat-phase=0``, ``sat-target=0``,
@@ -66,11 +103,25 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Forced incremental
       - The forced QF_ABV settings above
 
-Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
-was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
-``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
-for its cut-reference walks, fixing the stack overflow on wide
-division/remainder encodings.
+Other combinations use the baseline policy. The Kissat QF_ABV batch profile
+uses focused search only when its complete one-shot encoding is eligible.
+Partial encodings and array-refinement calls retain their ordinary search
+mode. Its late array expansion and congruence settings have explicit budgets.
+The QF_BV batch profile also requests complete one-shot encodings while
+retaining the ordinary search mode. Its greedy setting applies to calls
+that retain native incremental solving.
+The QF_FP batch profile supplies adaptive CNF selection, import ordering
+and the native greedy setting. It retires when AUTO observes an incremental
+session; explicitly supplied values retain their normal precedence.
+Both QF_BV batch profiles lift conditional definitions of bit-vector symbols
+and cancel doubled addends in equalities. An explicit
+``disable-simplifications`` keeps these automatic rewrites disabled.
+The CaDiCaL QF_ABV batch profile uses the same bounded late array expansion
+and congruence settings with automatic CNF selection. It retains the baseline
+CNF size threshold, and an explicit encoding choice takes precedence.
+An explicit ``--ackermanize=false`` keeps the automatic late array expansion
+budgets at their baseline values. Individually supplied late budgets retain
+their existing meaning.
 
 Session detection
 -----------------
@@ -104,8 +155,9 @@ keeps its previously measured profile and engagement policy.
 
 Forced QF_ABVFP sessions have separate profiles for both backends. They are
 selected only by ``--incremental=on`` or ``(set-option :incremental true)``.
-The QF_ABVFP AUTO and batch policies use baseline settings; pushes alone do
-not select a forced-session profile. CaDiCaL retains its baseline CNF
+The QF_ABVFP AUTO incremental policy uses baseline settings; pushes alone do
+not select a forced-session profile. Its batch policy is listed separately
+above and retires when AUTO observes a push. CaDiCaL retains its baseline CNF
 encoding and selects an initial false phase. Kissat uses ``new-medium``
 and retains its backend phase policy. Explicit user options take precedence
 over each profile setting.
@@ -139,6 +191,12 @@ suppressed in that case; individual explicit phase/mode options take
 precedence over the named configuration as usual. Encoding and factoring
 defaults can still come from the automatic profile.
 
+An explicit ``kissat-stable`` also suppresses the automatic
+``kissat-one-shot-stable`` default, including when its value is ``-1``.
+An explicitly supplied ``kissat-one-shot-stable`` still overrides the global
+mode on an eligible complete one-shot copy. A later push retires batch-only
+defaults before the incremental profile is applied.
+
 Use ``--sat-tuning=off`` to reproduce baseline defaults or compare manual
 configurations without automatic tuning. The SMT-LIB spelling is
 ``(set-option :sat-tuning off)``. Set it before the first check.
@@ -169,12 +227,13 @@ control after its first-check window has closed.
 Measurements
 ------------
 
-The confirmed finalists reduced mean PAR2 from 1.759 to 1.577 seconds on
+The initial tuning study reduced mean PAR2 from 1.759 to 1.577 seconds on
 46,191 batch QF_BV files with Kissat; from 4.695 to 2.806 seconds on 1,272
 files in the incremental QF_ABV directory with CaDiCaL; and from 4.469 to
 3.780 seconds on the same directory with Kissat. On 15,148 batch QF_ABV
 files, the CaDiCaL finalist reduced mean PAR2 from 0.717 to 0.685 seconds.
-These measured commands set their tuning options from the start of the file.
+That study preceded the batch profile updates above. Its measured commands
+set their tuning options from the start of the file.
 
 The incremental directory contains 970 files with multiple checks and 302
 with one check. On the multiple-check subset, the CaDiCaL finalist reduced

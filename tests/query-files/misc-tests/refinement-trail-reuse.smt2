@@ -9,6 +9,7 @@
 ; leaves this test's own expectations alone; the default is pinned by the
 ; UserDefinedFlags unit test. A CaDiCaL before 3.0 declines the whole-trail
 ; scope, so the engagement asserted here needs the 3.x line.
+; Disable late eager expansion so the reads still reach refinement.
 ; REQUIRES: cadical, cadical-3
 ; RUN: %solver --cadical -s --refinement-trail-reuse=1 %s 2>&1 | %OutputCheck --check-prefix=KEPT %s
 ; RUN: %solver --cadical -s --refinement-trail-reuse=0 %s 2>&1 | %OutputCheck --check-prefix=FRESH %s
@@ -17,6 +18,7 @@
 ; FRESH-NOT: Refinement trail reuse
 ; FRESH: ^sat
 (set-logic QF_ABV)
+(set-option :array-late-read-limit 0)
 (declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))
 (declare-fun i0 () (_ BitVec 8))
 (declare-fun i1 () (_ BitVec 8))

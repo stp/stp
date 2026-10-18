@@ -6,7 +6,9 @@
 ;
 ; Twelve reads at distinct symbolic indexes, so the read count is past the
 ; eager-encoding regime and the solve actually refines.
-; Name the CNF effort explicitly so SAT tuning cannot select a profile's encoder.
+; Name the CNF effort and threshold explicitly so SAT tuning cannot select
+; a profile's encoder or size crossover.
+; Disable late eager expansion so this still exercises read refinement.
 ;
 ; RUN: %solver --SMTLIB2 --cnf-generation-effort=auto -s %s 2>&1 | %OutputCheck %s
 ;
@@ -14,6 +16,8 @@
 ; CHECK: ^cnf-auto: [0-9]+ AIG nodes, chose medium$
 ; CHECK: ^sat$
 (set-logic QF_ABV)
+(set-option :array-late-read-limit 0)
+(set-option :cnf-auto-threshold 200000)
 (declare-fun a () (Array (_ BitVec 32) (_ BitVec 32)))
 (declare-fun i0 () (_ BitVec 32))
 (declare-fun i1 () (_ BitVec 32))

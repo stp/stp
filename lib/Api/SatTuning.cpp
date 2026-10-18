@@ -64,14 +64,44 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
   // QF_BV search, and found that QF_ABV benefits from pairing the in-house
   // encoding with disabled target phases, rephasing and Kissat probing.
   static const Profile baseline{"backend-defaults", {}};
-  static const Profile kissat_bv_batch{
-      "kissat-qf-bv-batch",
-      {{"sat-phase", "0"}, {"cnf-generation-effort", "new-medium"}}};
+  static const Profile kissat_bv_batch{"kissat-qf-bv-batch",
+                                       {{"sat-phase", "0"},
+                                        {"cnf-generation-effort", "auto"},
+                                        {"kissat-adaptive-cnf", "true"},
+                                        {"kissat-import-order", "2"},
+                                        {"kissat-incremental-greedy", "4"},
+                                        {"kissat-batch-only", "true"},
+                                        {"bv-conditional-equality", "true"},
+                                        {"bv-double-equality", "true"}}};
+  static const Profile cadical_bv_batch{"cadical-qf-bv-batch",
+                                        {{"sat-phase", "0"},
+                                         {"bv-conditional-equality", "true"},
+                                         {"bv-double-equality", "true"}}};
+  static const Profile kissat_fp_batch{"kissat-qf-fp-batch",
+                                       {{"kissat-adaptive-cnf", "true"},
+                                        {"kissat-import-order", "2"},
+                                        {"kissat-incremental-greedy", "2"}}};
+  static const Profile kissat_abv_batch{
+      "kissat-qf-abv-batch",
+      {{"cadical-factor", "off"},
+       {"kissat-batch-only", "true"},
+       {"kissat-one-shot-stable", "0"},
+       {"cnf-auto-threshold", "0"},
+       {"array-late-read-limit", "1024"},
+       {"array-late-expansion-limit", "100000"},
+       {"array-late-congruence-limit", "16000"},
+       {"array-equality-gia-cnf", "true"},
+       {"array-equality-gia-min-reads", "16"}}};
   static const Profile cadical_abv_batch{
       "cadical-qf-abv-batch",
       {{"search-bias", "unsat"},
-       {"cnf-generation-effort", "gia-low"},
-       {"cadical-factor", "off"}}};
+       {"cnf-generation-effort", "auto"},
+       {"cadical-factor", "off"},
+       {"array-late-read-limit", "1024"},
+       {"array-late-expansion-limit", "100000"},
+       {"array-late-congruence-limit", "16000"},
+       {"array-equality-gia-cnf", "true"},
+       {"array-equality-gia-min-reads", "16"}}};
   static const Profile cadical_abv_incremental{
       "cadical-qf-abv-incremental",
       {{"search-bias", "sat"},
@@ -128,11 +158,40 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     profile.settings.push_back({"kissat-greedy-growth", "1"});
     return profile;
   }();
+  static const Profile kissat_abvfp_batch = []
+  {
+    Profile profile = kissat_abvfp_forced_incremental;
+    profile.name = "kissat-qf-abvfp-batch";
+    return profile;
+  }();
+  static const Profile kissat_bvfp_batch = []
+  {
+    Profile profile = kissat_abvfp_batch;
+    profile.name = "kissat-qf-bvfp-batch";
+    return profile;
+  }();
+  static const Profile cadical_abvfp_batch{"cadical-qf-abvfp-batch",
+                                           {{"cadical-factor", "off"}}};
+  static const Profile cadical_bvfp_batch{"cadical-qf-bvfp-batch",
+                                          {{"cadical-factor", "off"}}};
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
+  if (backend == Flags::CADICAL_SOLVER && logic == "QF_BV" && !incremental)
+    return cadical_bv_batch;
+  if (backend == Flags::KISSAT_SOLVER && logic == "QF_FP" && !incremental)
+    return kissat_fp_batch;
+  if (backend == Flags::KISSAT_SOLVER && logic == "QF_ABV" && !incremental)
+    return kissat_abv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
     return cadical_abv_batch;
+  if (!incremental && (logic == "QF_ABVFP" || logic == "QF_BVFP"))
+  {
+    if (backend == Flags::KISSAT_SOLVER)
+      return logic == "QF_ABVFP" ? kissat_abvfp_batch : kissat_bvfp_batch;
+    if (backend == Flags::CADICAL_SOLVER)
+      return logic == "QF_ABVFP" ? cadical_abvfp_batch : cadical_bvfp_batch;
+  }
   if (logic == "QF_BV" && incremental)
   {
     if (backend == Flags::CADICAL_SOLVER)
@@ -159,7 +218,6 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::KISSAT_SOLVER)
       return kissat_abvfp_forced_incremental;
   }
-  // The Kissat batch QF_ABV finalist was slower than its baseline.
   return baseline;
 }
 
@@ -209,6 +267,10 @@ void apply_sat_tuning_defaults(const OptionsImpl& options,
       std::get<std::string>(options.resolved(index_of("sat-tuning"))) != "auto")
     return;
   const bool explicit_bias = options.is_set[index_of("search-bias")];
+  const std::size_t ackermann = index_of("ackermanize");
+  const bool explicit_lazy_arrays =
+      !derived.at_default[ackermann] &&
+      !std::get<bool>(derived.resolved[ackermann]);
   for (const auto& [index, value] : tuning.entries)
   {
     // Presence protects even an explicit "auto", "none", -1, or a value
@@ -216,14 +278,27 @@ void apply_sat_tuning_defaults(const OptionsImpl& options,
     // options also outrank a profile default.
     if (!derived.at_default[index])
       continue;
+    // Late expansion may temporarily enable Ackermannization. Do not supply
+    // its budgets against an explicit request for lazy arrays. Individually
+    // explicit budgets were already preserved above.
+    const std::string_view name = spec_at(index).name;
+    if (explicit_lazy_arrays && (name == "array-late-read-limit" ||
+                                 name == "array-late-expansion-limit" ||
+                                 name == "array-late-congruence-limit"))
+      continue;
     // The diagnostic core-only policy disables trail reuse. An explicitly
     // selected mode is already preserved by the presence check above.
-    if (std::string_view(spec_at(index).name) == "kissat-trail-reuse-mode" &&
+    if (name == "kissat-trail-reuse-mode" &&
         std::get<bool>(options.resolved(index_of("incremental-core-only"))))
       continue;
     // An explicitly named search configuration owns its phase/mode policy.
     // Individual explicit phase/mode controls still override it normally.
-    if (explicit_bias && search_setting(spec_at(index).name))
+    if (explicit_bias && search_setting(name))
+      continue;
+    // A user-selected global mode also governs a complete one-shot copy.
+    // A separately explicit one-shot mode still takes precedence normally.
+    if (name == "kissat-one-shot-stable" &&
+        options.is_set[index_of("kissat-stable")])
       continue;
     derived.resolved[index] = value;
     derived.at_default[index] = false;
