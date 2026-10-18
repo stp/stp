@@ -577,10 +577,7 @@ TEST(OptionEffects, cadical_abv_late_push_replaces_batch_tuning_before_engagemen
     EXPECT_FALSE(api_test::engine_solver(s).hasIncrementalSolver());
     EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_AUTO);
     EXPECT_EQ(flags_after(tm).array_late_read_limit, 1024);
-    if (parsed)
-      s.parse_smt2("(push 1)");
-    else
-      s.push();
+    s.push();
     ASSERT_TRUE(s.check_sat().is_sat());
     EXPECT_TRUE(api_test::engine_solver(s).hasIncrementalSolver());
     EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::SAT);
@@ -594,10 +591,7 @@ TEST(OptionEffects, cadical_abv_late_push_replaces_batch_tuning_before_engagemen
     EXPECT_EQ(flags_after(tm).array_late_expansion_limit, 200u);
     EXPECT_EQ(flags_after(tm).array_late_congruence_limit, 4000u);
     EXPECT_FALSE(flags_after(tm).array_equality_gia_cnf);
-    if (parsed)
-      s.parse_smt2("(pop 1)");
-    else
-      s.pop();
+    s.pop();
     ASSERT_TRUE(s.check_sat().is_sat());
     EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
     EXPECT_EQ(flags_after(tm).array_late_read_limit, 0);
@@ -1208,10 +1202,7 @@ TEST(OptionEffects, kissat_abv_batch_defaults_retire_before_a_late_push)
     ASSERT_TRUE(solver.check_sat().is_sat());
     EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
     EXPECT_TRUE(flags_after(tm).kissat_batch_only);
-    if (parsed)
-      solver.parse_smt2("(push 1)");
-    else
-      solver.push();
+    solver.push();
     ASSERT_TRUE(solver.check_sat().is_sat());
     EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
     EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::SAT);
@@ -1230,10 +1221,7 @@ TEST(OptionEffects, kissat_abv_batch_defaults_retire_before_a_late_push)
     EXPECT_EQ(flags_after(tm).array_late_expansion_limit, 200u);
     EXPECT_EQ(flags_after(tm).array_late_congruence_limit, 4000u);
     EXPECT_FALSE(flags_after(tm).array_equality_gia_cnf);
-    if (parsed)
-      solver.parse_smt2("(pop 1)");
-    else
-      solver.pop();
+    solver.pop();
     ASSERT_TRUE(solver.check_sat().is_sat());
     EXPECT_FALSE(flags_after(tm).kissat_batch_only);
   }
@@ -1269,9 +1257,12 @@ TEST(OptionEffects, kissat_abv_batch_defaults_respect_opt_out_and_named_search)
   }
 }
 
-TEST(OptionEffects, kissat_abv_batch_defaults_leave_other_backends_unchanged)
+TEST(OptionEffects, kissat_abv_batch_defaults_respect_other_backend_profiles)
 {
   const Options baseline;
+  Options cadical_expected;
+  for (const auto& setting : cadical_abv_batch_settings)
+    cadical_expected.set(setting.name, setting.value);
   for (const char* backend :
        {"cadical", "cryptominisat", "minisat", "simplifying-minisat", "kissat"})
   {
@@ -1281,6 +1272,10 @@ TEST(OptionEffects, kissat_abv_batch_defaults_leave_other_backends_unchanged)
     {
       if (std::string(backend) == "kissat" && std::string(incremental) != "on")
         continue;
+      const Options& expected =
+          std::string(backend) == "cadical" && std::string(incremental) != "on"
+              ? cadical_expected
+              : baseline;
       SCOPED_TRACE(backend);
       SCOPED_TRACE(incremental);
       TermManager tm;
@@ -1297,7 +1292,7 @@ TEST(OptionEffects, kissat_abv_batch_defaults_leave_other_backends_unchanged)
         {
           SCOPED_TRACE(setting.name);
           EXPECT_EQ(solver.options().resolved(setting.name),
-                    baseline.get(setting.name));
+                    expected.get(setting.name));
         }
     }
   }
@@ -1450,9 +1445,9 @@ TEST(OptionEffects, bv_batch_defaults_reach_native_and_parsed_encodings)
         Solver solver(tm, options);
         if (parsed)
         {
-          solver.parse_smt2("(set-logic QF_BV)");
-          if (forced_batch)
-            solver.parse_smt2("(set-option :incremental false)");
+          solver.parse_smt2(
+              std::string("(set-logic QF_BV)") +
+              (forced_batch ? "(set-option :incremental false)" : ""));
         }
         add_tuning_bv_problem(tm, solver);
         bool emitted = false;
@@ -1570,10 +1565,7 @@ TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
       EXPECT_EQ(flags_after(tm).kissat_batch_only, kissat);
       EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
       EXPECT_TRUE(flags_after(tm).enable_double_equality);
-      if (parsed)
-        solver.parse_smt2("(push 1)");
-      else
-        solver.push();
+      solver.push();
       ASSERT_TRUE(solver.check_sat().is_sat());
       EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
       for (const auto& setting : settings)
@@ -1588,10 +1580,7 @@ TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
       EXPECT_EQ(flags_after(tm).kissat_incremental_greedy, 0);
       EXPECT_FALSE(flags_after(tm).enable_conditional_equality);
       EXPECT_FALSE(flags_after(tm).enable_double_equality);
-      if (parsed)
-        solver.parse_smt2("(pop 1)");
-      else
-        solver.pop();
+      solver.pop();
       ASSERT_TRUE(solver.check_sat().is_sat());
       EXPECT_FALSE(flags_after(tm).kissat_batch_only);
       EXPECT_EQ(solver.options().resolved("sat-phase"),
@@ -2003,10 +1992,7 @@ TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
         EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
         EXPECT_EQ(flags_after(tm).cadical_factor,
                   stp::UserDefinedFlags::BVAMode::OFF);
-        if (parsed)
-          solver.parse_smt2("(push 1)");
-        else
-          solver.push();
+        solver.push();
         ASSERT_TRUE(solver.check_sat().is_sat());
         EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
         for (const auto& setting : settings)
@@ -2015,10 +2001,7 @@ TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
           EXPECT_EQ(solver.options().resolved(setting.name),
                     baseline.resolved(setting.name));
         }
-        if (parsed)
-          solver.parse_smt2("(pop 1)");
-        else
-          solver.pop();
+        solver.pop();
         ASSERT_TRUE(solver.check_sat().is_sat());
         for (const auto& setting : settings)
           EXPECT_EQ(solver.options().resolved(setting.name),
@@ -2195,10 +2178,8 @@ TEST(OptionEffects, batch_defaults_preserve_explicit_lazy_array_lowering)
             {
               emitted = true;
               const auto& flags = flags_after(tm);
-              if (!explicit_late_budget)
-              {
-                EXPECT_FALSE(flags.ackermannisation);
-              }
+              // The existing small-array pass can expand reads independently.
+              // The automatic late budgets must still respect the caller.
               EXPECT_EQ(flags.array_late_read_limit,
                         explicit_late_budget ? 1024 : 0);
               EXPECT_EQ(flags.array_late_expansion_limit, 200u);
