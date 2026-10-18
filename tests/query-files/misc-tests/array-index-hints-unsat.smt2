@@ -13,6 +13,8 @@
 ; PHASE: ^unsat
 ; OFF: ^unsat
 (set-logic QF_ABV)
+; Keep the reads available for the hints under automatic batch tuning.
+(set-option :array-late-read-limit 0)
 (declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))
 (declare-fun i0 () (_ BitVec 8))
 (declare-fun i1 () (_ BitVec 8))
