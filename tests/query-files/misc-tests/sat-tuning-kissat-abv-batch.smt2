@@ -19,12 +19,13 @@
 ; THE SOFTWARE.
 ;
 ; REQUIRES: kissat
+; CI also runs this with an explicit --cadical-factor=off.
 ; RUN: %solver --kissat --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=AUTO %s
 ; RUN: %solver --kissat --kissat-stable=2 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=GLOBAL %s
 ; RUN: %solver --kissat --kissat-batch-only=false --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
 ; RUN: %solver --kissat --sat-tuning=off --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ; AUTO: ^SAT tuning: backend=kissat logic=QF_ABV session=batch profile=kissat-qf-abv-batch$
-; AUTO: ^SAT tuning: cadical-factor=off \(automatic\)$
+; AUTO: ^SAT tuning: cadical-factor=off \((automatic|explicit)\)$
 ; AUTO: ^SAT tuning: kissat-batch-only=true \(automatic\)$
 ; AUTO: ^SAT tuning: kissat-one-shot-stable=0 \(automatic\)$
 ; AUTO: ^SAT tuning: cnf-auto-threshold=0 \(automatic\)$

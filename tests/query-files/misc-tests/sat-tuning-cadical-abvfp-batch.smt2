@@ -19,11 +19,12 @@
 ; THE SOFTWARE.
 ;
 ; REQUIRES: cadical
+; CI also runs this with an explicit --cadical-factor=off.
 ; RUN: %solver --cadical --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=AUTO %s
 ; RUN: %solver --cadical --cadical-factor=auto --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
 ; RUN: %solver --cadical --sat-tuning=off --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ; AUTO: ^SAT tuning: backend=cadical logic=QF_ABVFP session=batch profile=cadical-qf-abvfp-batch$
-; AUTO: ^SAT tuning: cadical-factor=off \(automatic\)$
+; AUTO: ^SAT tuning: cadical-factor=off \((automatic|explicit)\)$
 ; AUTO: ^sat$
 ; EXPLICIT: ^SAT tuning: cadical-factor=auto \(explicit\)$
 ; EXPLICIT: ^sat$
