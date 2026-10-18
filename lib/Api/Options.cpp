@@ -1592,7 +1592,8 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
                            "array-late-congruence-limit",
                            "array-equality-gia-cnf",
                            "array-equality-gia-min-reads",
-                           "bv-conditional-equality"})
+                           "bv-conditional-equality",
+                           "bv-double-equality"})
   {
     const OptionSpec& spec = *find_option(name);
     const std::size_t index = option_index(&spec);

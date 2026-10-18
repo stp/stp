@@ -67,13 +67,16 @@ struct TuningSetting
 std::vector<TuningSetting> bv_batch_settings(bool kissat)
 {
   std::vector<TuningSetting> settings{{"sat-phase", "0"}};
-  const TuningSetting extras[] = {
-      {"cnf-generation-effort", "auto"}, {"kissat-adaptive-cnf", "true"},
-      {"kissat-import-order", "2"},      {"kissat-incremental-greedy", "4"},
-      {"kissat-batch-only", "true"},     {"bv-conditional-equality", "true"}};
+  const TuningSetting extras[] = {{"cnf-generation-effort", "auto"},
+                                  {"kissat-adaptive-cnf", "true"},
+                                  {"kissat-import-order", "2"},
+                                  {"kissat-incremental-greedy", "4"},
+                                  {"kissat-batch-only", "true"}};
   if (kissat)
     for (const auto& setting : extras)
       settings.push_back(setting);
+  settings.push_back({"bv-conditional-equality", "true"});
+  settings.push_back({"bv-double-equality", "true"});
   return settings;
 }
 
@@ -1464,7 +1467,8 @@ TEST(OptionEffects, bv_batch_defaults_reach_native_and_parsed_encodings)
               EXPECT_EQ(flags.kissat_import_order, kissat ? 2 : 0);
               EXPECT_EQ(flags.kissat_incremental_greedy, kissat ? 4 : 0);
               EXPECT_EQ(flags.kissat_one_shot_stable, -1);
-              EXPECT_EQ(flags.enable_conditional_equality, kissat);
+              EXPECT_TRUE(flags.enable_conditional_equality);
+              EXPECT_TRUE(flags.enable_double_equality);
             });
         ASSERT_TRUE(solver.check_sat().is_sat());
         EXPECT_TRUE(emitted);
@@ -1564,7 +1568,8 @@ TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
       EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
       EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
       EXPECT_EQ(flags_after(tm).kissat_batch_only, kissat);
-      EXPECT_EQ(flags_after(tm).enable_conditional_equality, kissat);
+      EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+      EXPECT_TRUE(flags_after(tm).enable_double_equality);
       if (parsed)
         solver.parse_smt2("(push 1)");
       else
@@ -1582,6 +1587,7 @@ TEST(OptionEffects, bv_batch_defaults_retire_before_a_late_push)
       EXPECT_EQ(flags_after(tm).kissat_import_order, 0);
       EXPECT_EQ(flags_after(tm).kissat_incremental_greedy, 0);
       EXPECT_FALSE(flags_after(tm).enable_conditional_equality);
+      EXPECT_FALSE(flags_after(tm).enable_double_equality);
       if (parsed)
         solver.parse_smt2("(pop 1)");
       else
@@ -1674,11 +1680,15 @@ TEST(OptionEffects, copying_bv_batch_options_does_not_copy_automatic_values)
     }
     EXPECT_FALSE(flags_after(tm).kissat_batch_only);
     EXPECT_FALSE(flags_after(tm).kissat_adaptive_cnf);
+    EXPECT_FALSE(flags_after(tm).enable_conditional_equality);
+    EXPECT_FALSE(flags_after(tm).enable_double_equality);
     ASSERT_TRUE(solver.check_sat().is_sat());
     EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
     EXPECT_EQ(flags_after(tm).kissat_batch_only, kissat);
     EXPECT_EQ(flags_after(tm).kissat_import_order, kissat ? 2 : 0);
     EXPECT_EQ(flags_after(tm).kissat_adaptive_cnf, kissat);
+    EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+    EXPECT_TRUE(flags_after(tm).enable_double_equality);
   }
 }
 
@@ -1711,75 +1721,139 @@ TEST(OptionEffects, kissat_bv_batch_defaults_preserve_closed_option_windows)
 
 TEST(OptionEffects, bv_batch_conditional_default_rewrites_prebuilt_definitions)
 {
-  if (!has_sat_backend("kissat"))
-    GTEST_SKIP() << "Kissat is not part of this build";
-  for (const bool parsed : {false, true})
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
   {
-    SCOPED_TRACE(parsed);
-    TermManager::Config config;
-    config.simplify = false;
-    TermManager tm(config);
-    const Term condition = tm.declare("auto_conditional_c", tm.mk_bool_sort());
-    const Sort word = tm.mk_bv_sort(8);
-    const Term x = tm.declare("auto_conditional_x", word);
-    const Term a = tm.declare("auto_conditional_a", word);
-    const Term b = tm.declare("auto_conditional_b", word);
-    const Term definition = ite(condition, x == a, x == b);
-    const Term opposite = x != ite(condition, a, b);
-    Options options;
-    options.set_str("sat-backend", "kissat");
-    options.set_bool("check-sanity", true);
-    if (!parsed)
-      options.set_str("logic", "QF_BV");
-    Solver solver(tm, options);
-    if (parsed)
-      solver.parse_smt2("(set-logic QF_BV)");
-    solver.add(definition && opposite);
-    bool emitted = false;
-    solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
-    ASSERT_TRUE(solver.check_sat().is_unsat());
-    EXPECT_FALSE(emitted);
-    EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
-    EXPECT_FALSE(solver.options().is_set("bv-conditional-equality"));
-    EXPECT_FALSE(solver.options().get_bool("bv-conditional-equality"));
-    EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
-              OptionValue(true));
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    for (const bool parsed : {false, true})
+    {
+      SCOPED_TRACE(parsed);
+      TermManager::Config config;
+      config.simplify = false;
+      TermManager tm(config);
+      const Term condition =
+          tm.declare("auto_conditional_c", tm.mk_bool_sort());
+      const Sort word = tm.mk_bv_sort(8);
+      const Term x = tm.declare("auto_conditional_x", word);
+      const Term a = tm.declare("auto_conditional_a", word);
+      const Term b = tm.declare("auto_conditional_b", word);
+      const Term definition = ite(condition, x == a, x == b);
+      const Term opposite = x != ite(condition, a, b);
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_bool("check-sanity", true);
+      if (!parsed)
+        options.set_str("logic", "QF_BV");
+      Solver solver(tm, options);
+      if (parsed)
+        solver.parse_smt2("(set-logic QF_BV)");
+      solver.add(definition && opposite);
+      bool emitted = false;
+      solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
+      ASSERT_TRUE(solver.check_sat().is_unsat());
+      EXPECT_FALSE(emitted);
+      EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
+      EXPECT_FALSE(solver.options().is_set("bv-conditional-equality"));
+      EXPECT_FALSE(solver.options().get_bool("bv-conditional-equality"));
+      EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
+                OptionValue(true));
+    }
+  }
+}
+
+TEST(OptionEffects, bv_batch_double_default_rewrites_prebuilt_equalities)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const bool parsed : {false, true})
+    {
+      SCOPED_TRACE(backend);
+      SCOPED_TRACE(parsed);
+      TermManager::Config config;
+      config.simplify = false;
+      TermManager tm(config);
+      const Sort word = tm.mk_bv_sort(8);
+      const Term x = tm.declare("auto_double_x", word);
+      const Term y = tm.declare("auto_double_y", word);
+      const Term definition = bvadd(x, y) == bvshl(x, tm.mk_bv(8, 1));
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_bool("check-sanity", true);
+      if (!parsed)
+        options.set_str("logic", "QF_BV");
+      Solver solver(tm, options);
+      if (parsed)
+        solver.parse_smt2("(set-logic QF_BV)");
+      solver.add(definition && x != y);
+      bool emitted = false;
+      solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
+      ASSERT_TRUE(solver.check_sat().is_unsat());
+      EXPECT_FALSE(emitted);
+      EXPECT_TRUE(flags_after(tm).enable_double_equality);
+      EXPECT_FALSE(solver.options().is_set("bv-double-equality"));
+      EXPECT_FALSE(solver.options().get_bool("bv-double-equality"));
+      EXPECT_EQ(solver.options().resolved("bv-double-equality"),
+                OptionValue(true));
+    }
   }
 }
 
 TEST(OptionEffects, bv_batch_defaults_preserve_explicit_composite_settings)
 {
-  if (!has_sat_backend("kissat"))
-    GTEST_SKIP() << "Kissat is not part of this build";
-  for (const bool parsed : {false, true})
-    for (const bool disabled : {false, true})
-    {
-      SCOPED_TRACE(parsed);
-      SCOPED_TRACE(disabled);
-      TermManager tm;
-      Options options;
-      options.set_str("sat-backend", "kissat");
-      options.set_bool("check-sanity", true);
-      if (!parsed)
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned BV batch backend is part of this build";
+  }
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    for (const bool parsed : {false, true})
+      for (const bool disabled : {false, true})
       {
-        options.set_str("logic", "QF_BV");
-        options.set_bool("disable-simplifications", disabled);
+        SCOPED_TRACE(parsed);
+        SCOPED_TRACE(disabled);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_bool("check-sanity", true);
+        if (!parsed)
+        {
+          options.set_str("logic", "QF_BV");
+          options.set_bool("disable-simplifications", disabled);
+        }
+        Solver solver(tm, options);
+        if (parsed)
+          solver.parse_smt2(
+              std::string(
+                  "(set-logic QF_BV)(set-option :disable-simplifications ") +
+              (disabled ? "true)" : "false)"));
+        const Term x = tm.declare("auto_composite_x", tm.mk_bv_sort(8));
+        solver.add(x == 1);
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_EQ(flags_after(tm).enable_conditional_equality, !disabled);
+        EXPECT_EQ(flags_after(tm).enable_double_equality, !disabled);
+        EXPECT_FALSE(solver.options().is_set("bv-conditional-equality"));
+        EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
+                  OptionValue(!disabled));
+        EXPECT_FALSE(solver.options().is_set("bv-double-equality"));
+        EXPECT_EQ(solver.options().resolved("bv-double-equality"),
+                  OptionValue(!disabled));
+        EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
       }
-      Solver solver(tm, options);
-      if (parsed)
-        solver.parse_smt2(
-            std::string(
-                "(set-logic QF_BV)(set-option :disable-simplifications ") +
-            (disabled ? "true)" : "false)"));
-      const Term x = tm.declare("auto_composite_x", tm.mk_bv_sort(8));
-      solver.add(x == 1);
-      ASSERT_TRUE(solver.check_sat().is_sat());
-      EXPECT_EQ(flags_after(tm).enable_conditional_equality, !disabled);
-      EXPECT_FALSE(solver.options().is_set("bv-conditional-equality"));
-      EXPECT_EQ(solver.options().resolved("bv-conditional-equality"),
-                OptionValue(!disabled));
-      EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
-    }
+  }
 }
 
 TEST(OptionEffects, fp_batch_defaults_reach_native_and_parsed_encodings)
@@ -2048,10 +2122,10 @@ TEST(OptionEffects, batch_defaults_yield_to_first_assumptions_and_core_requests)
           for (const char* name :
                {"kissat-batch-only", "kissat-one-shot-stable",
                 "kissat-adaptive-cnf", "kissat-import-order",
-                "bv-conditional-equality", "cnf-auto-threshold",
-                "array-late-read-limit", "array-late-expansion-limit",
-                "array-late-congruence-limit", "array-equality-gia-cnf",
-                "array-equality-gia-min-reads"})
+                "bv-conditional-equality", "bv-double-equality",
+                "cnf-auto-threshold", "array-late-read-limit",
+                "array-late-expansion-limit", "array-late-congruence-limit",
+                "array-equality-gia-cnf", "array-equality-gia-min-reads"})
           {
             SCOPED_TRACE(name);
             EXPECT_EQ(solver.options().resolved(name), baseline.get(name));
@@ -2062,6 +2136,7 @@ TEST(OptionEffects, batch_defaults_yield_to_first_assumptions_and_core_requests)
           EXPECT_FALSE(flags.kissat_adaptive_cnf);
           EXPECT_EQ(flags.kissat_import_order, 0);
           EXPECT_FALSE(flags.enable_conditional_equality);
+          EXPECT_FALSE(flags.enable_double_equality);
           EXPECT_EQ(flags.array_late_read_limit, 0);
           EXPECT_EQ(flags.array_late_expansion_limit, 200u);
           EXPECT_EQ(flags.array_late_congruence_limit, 4000u);

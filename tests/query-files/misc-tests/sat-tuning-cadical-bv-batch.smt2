@@ -20,15 +20,19 @@
 ;
 ; REQUIRES: cadical
 ; RUN: %solver --cadical --incremental-auto-engage-at=1 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=AUTO %s
-; RUN: %solver --cadical --sat-phase=-1 --incremental-auto-engage-at=1 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
+; RUN: %solver --cadical --sat-phase=-1 --bv-conditional-equality=false --bv-double-equality=false --incremental-auto-engage-at=1 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
 ; RUN: %solver --cadical --sat-tuning=off --incremental-auto-engage-at=1 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ; AUTO: ^SAT tuning: backend=cadical logic=QF_BV session=batch profile=cadical-qf-bv-batch$
 ; AUTO: ^SAT tuning: sat-phase=0 \(automatic\)$
+; AUTO: ^SAT tuning: bv-conditional-equality=true \(automatic\)$
+; AUTO: ^SAT tuning: bv-double-equality=true \(automatic\)$
 ; AUTO: ^sat$
 ; AUTO: ^SAT tuning: backend=cadical logic=QF_BV session=incremental profile=cadical-qf-bv-incremental$
 ; AUTO: ^sat$
 ; AUTO: ^sat$
 ; EXPLICIT: ^SAT tuning: sat-phase=-1 \(explicit\)$
+; EXPLICIT: ^SAT tuning: bv-conditional-equality=false \(explicit\)$
+; EXPLICIT: ^SAT tuning: bv-double-equality=false \(explicit\)$
 ; EXPLICIT: ^sat$
 ; EXPLICIT: ^sat$
 ; EXPLICIT: ^sat$

@@ -22,6 +22,8 @@
 ; RUN: %solver --kissat --incremental-auto-engage-at=1 --check-sanity -s %s 2>&1 | %OutputCheck %s
 ; CHECK: ^SAT tuning: backend=kissat logic=QF_BV session=batch profile=kissat-qf-bv-batch$
 ; CHECK: ^SAT tuning: kissat-batch-only=true \(automatic\)$
+; CHECK: ^SAT tuning: bv-conditional-equality=true \(automatic\)$
+; CHECK: ^SAT tuning: bv-double-equality=true \(automatic\)$
 ; CHECK: ^sat$
 ; CHECK: ^SAT tuning: backend=kissat logic=QF_BV session=incremental profile=kissat-qf-bv-incremental$
 ; CHECK: ^sat$
