@@ -34,6 +34,11 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Batch
       - ``sat-phase=0``, ``bv-conditional-equality=true``,
         ``bv-double-equality=true``
+    * - Kissat
+      - QF_FP
+      - Batch
+      - ``kissat-adaptive-cnf=true``, ``kissat-import-order=2``,
+        ``kissat-incremental-greedy=2``
     * - CaDiCaL
       - QF_BV
       - Incremental
@@ -105,6 +110,9 @@ mode. Its late array expansion and congruence settings have explicit budgets.
 The QF_BV batch profile also requests complete one-shot encodings while
 retaining the ordinary search mode. Its greedy setting applies to calls
 that retain native incremental solving.
+The QF_FP batch profile supplies adaptive CNF selection, import ordering
+and the native greedy setting. It retires when AUTO observes an incremental
+session; explicitly supplied values retain their normal precedence.
 Both QF_BV batch profiles lift conditional definitions of bit-vector symbols
 and cancel doubled addends in equalities. An explicit
 ``disable-simplifications`` keeps these automatic rewrites disabled.

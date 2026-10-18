@@ -1299,14 +1299,17 @@ TEST(Options,
                                      std::string(backend) == "kissat");
         const bool measured_bvfp =
             std::string(logic) == "QF_BVFP" && std::string(backend) == "kissat";
+        const bool measured_fp_batch =
+            std::string(logic) == "QF_FP" && std::string(backend) == "kissat";
         if (std::string(incremental) == "on" &&
             (measured_abvfp || measured_bvfp))
           continue;
         if (std::string(incremental) == "off" &&
-            (std::string(logic) == "QF_ABVFP" ||
-             std::string(logic) == "QF_BVFP") &&
-            (std::string(backend) == "cadical" ||
-             std::string(backend) == "kissat"))
+            (((std::string(logic) == "QF_ABVFP" ||
+               std::string(logic) == "QF_BVFP") &&
+              (std::string(backend) == "cadical" ||
+               std::string(backend) == "kissat")) ||
+             measured_fp_batch))
           continue;
         SCOPED_TRACE(std::string(backend) + "/" + logic + "/" + incremental);
         TermManager tm;
@@ -1323,7 +1326,8 @@ TEST(Options,
         for (const char* name :
              {"search-bias", "sat-phase", "sat-target", "sat-rephase",
               "kissat-stable", "kissat-probe", "kissat-trail-reuse-mode",
-              "cnf-generation-effort", "cadical-factor"})
+              "cnf-generation-effort", "cadical-factor", "kissat-adaptive-cnf",
+              "kissat-import-order", "kissat-incremental-greedy"})
           EXPECT_EQ(solver.options().resolved(name), options.resolved(name))
               << name;
       }
@@ -1343,9 +1347,10 @@ TEST(Options, kissat_greedy_tuning_resolves_by_logic_and_session)
       const bool bv = std::string(logic) == "QF_BV";
       const bool bvfp = std::string(logic) == "QF_BVFP";
       const bool abvfp = std::string(logic) == "QF_ABVFP";
+      const bool fp = std::string(logic) == "QF_FP";
       const bool tuned =
           (std::string(incremental) == "on" && (bv || bvfp || abvfp)) ||
-          (std::string(incremental) == "off" && (bv || bvfp || abvfp));
+          (std::string(incremental) == "off" && (bv || bvfp || abvfp || fp));
       Options expected;
       if (tuned)
       {

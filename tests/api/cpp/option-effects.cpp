@@ -111,8 +111,22 @@ const TuningSetting cadical_abv_batch_settings[] = {
     {"array-equality-gia-cnf", "true"},
     {"array-equality-gia-min-reads", "16"}};
 
-std::vector<TuningSetting> fp_batch_settings(bool kissat)
+std::vector<const char*> fp_batch_logics(bool kissat)
 {
+  std::vector<const char*> logics{"QF_BVFP", "QF_ABVFP"};
+  if (kissat)
+    logics.push_back("QF_FP");
+  return logics;
+}
+
+std::vector<TuningSetting> fp_batch_settings(bool kissat, bool pure_fp = false)
+{
+  if (pure_fp && !kissat)
+    return {};
+  if (pure_fp)
+    return {{"kissat-adaptive-cnf", "true"},
+            {"kissat-import-order", "2"},
+            {"kissat-incremental-greedy", "2"}};
   if (!kissat)
     return {{"cadical-factor", "off"}};
   return {{"search-bias", "sat"},
@@ -1857,60 +1871,95 @@ TEST(OptionEffects, fp_batch_defaults_reach_native_and_parsed_encodings)
     if (!has_sat_backend(backend))
       continue;
     const bool kissat = std::string(backend) == "kissat";
-    const auto settings = fp_batch_settings(kissat);
-    Options expected;
-    for (const auto& setting : settings)
-      expected.set(setting.name, setting.value);
-    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+    for (const char* logic : fp_batch_logics(kissat))
+    {
+      const bool pure_fp = std::string(logic) == "QF_FP";
+      const auto settings = fp_batch_settings(kissat, pure_fp);
+      Options expected;
+      for (const auto& setting : settings)
+        expected.set(setting.name, setting.value);
       for (const bool parsed : {false, true})
-      {
-        SCOPED_TRACE(backend);
-        SCOPED_TRACE(logic);
-        SCOPED_TRACE(parsed);
-        TermManager tm;
-        Options options;
-        options.set_str("sat-backend", backend);
-        options.set_bool("check-sanity", true);
-        if (!parsed)
-          options.set_str("logic", logic);
-        Solver solver(tm, options);
-        if (parsed)
-          solver.parse_smt2("(set-logic " + std::string(logic) + ")");
-        add_tuning_fp_problem(tm, solver, std::string(logic) == "QF_ABVFP");
-        bool emitted = false;
-        solver.set_cnf_sink(
-            [&](std::string_view, CnfScope)
-            {
-              emitted = true;
-              const auto& flags = flags_after(tm);
-              EXPECT_EQ(flags.cadical_factor,
-                        stp::UserDefinedFlags::BVAMode::OFF);
-              if (kissat)
-              {
-                EXPECT_EQ(flags.search_bias, stp::SearchBias::SAT);
-                EXPECT_EQ(flags.kissat_stable, 2);
-                EXPECT_EQ(flags.sat_search_options.target, 0);
-                EXPECT_EQ(flags.sat_search_options.rephase, 0);
-                EXPECT_EQ(flags.cnf_effort,
-                          stp::UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM);
-                EXPECT_FALSE(flags.kissat_probe);
-                EXPECT_EQ(flags.kissat_trail_reuse_mode, 2);
-                EXPECT_EQ(flags.kissat_incremental_greedy, 2);
-                EXPECT_EQ(flags.kissat_greedy_growth, 1);
-              }
-            });
-        ASSERT_TRUE(solver.check_sat().is_sat());
-        EXPECT_TRUE(emitted);
-        for (const auto& setting : settings)
+        for (const bool forced_batch : {false, true})
         {
-          SCOPED_TRACE(setting.name);
-          EXPECT_EQ(solver.options().resolved(setting.name),
-                    expected.resolved(setting.name));
-          EXPECT_FALSE(solver.options().is_set(setting.name));
-          EXPECT_EQ(solver.options().get(setting.name),
-                    baseline.get(setting.name));
+          SCOPED_TRACE(backend);
+          SCOPED_TRACE(logic);
+          SCOPED_TRACE(parsed);
+          SCOPED_TRACE(forced_batch);
+          TermManager tm;
+          Options options;
+          options.set_str("sat-backend", backend);
+          options.set_bool("check-sanity", true);
+          if (!parsed)
+          {
+            options.set_str("logic", logic);
+            if (forced_batch)
+              options.set_str("incremental", "off");
+          }
+          Solver solver(tm, options);
+          if (parsed)
+            solver.parse_smt2(
+                "(set-logic " + std::string(logic) + ")" +
+                (forced_batch ? "(set-option :incremental false)" : ""));
+          add_tuning_fp_problem(tm, solver, std::string(logic) == "QF_ABVFP");
+          bool emitted = false;
+          solver.set_cnf_sink(
+              [&](std::string_view, CnfScope)
+              {
+                emitted = true;
+                const auto& flags = flags_after(tm);
+                if (pure_fp)
+                {
+                  EXPECT_TRUE(flags.kissat_adaptive_cnf);
+                  EXPECT_EQ(flags.kissat_import_order, 2);
+                  EXPECT_EQ(flags.kissat_incremental_greedy, 2);
+                  EXPECT_FALSE(flags.kissat_batch_only);
+                  EXPECT_EQ(flags.kissat_stable, -1);
+                  EXPECT_EQ(flags.sat_search_options.phase, -1);
+                  EXPECT_TRUE(flags.kissat_probe);
+                }
+                else
+                {
+                  EXPECT_EQ(flags.cadical_factor,
+                            stp::UserDefinedFlags::BVAMode::OFF);
+                }
+                if (kissat && !pure_fp)
+                {
+                  EXPECT_EQ(flags.search_bias, stp::SearchBias::SAT);
+                  EXPECT_EQ(flags.kissat_stable, 2);
+                  EXPECT_EQ(flags.sat_search_options.target, 0);
+                  EXPECT_EQ(flags.sat_search_options.rephase, 0);
+                  EXPECT_EQ(flags.cnf_effort,
+                            stp::UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM);
+                  EXPECT_FALSE(flags.kissat_probe);
+                  EXPECT_EQ(flags.kissat_trail_reuse_mode, 2);
+                  EXPECT_EQ(flags.kissat_incremental_greedy, 2);
+                  EXPECT_EQ(flags.kissat_greedy_growth, 1);
+                }
+              });
+          ASSERT_TRUE(solver.check_sat().is_sat());
+          EXPECT_TRUE(emitted);
+          for (const auto& setting : settings)
+          {
+            SCOPED_TRACE(setting.name);
+            EXPECT_EQ(solver.options().resolved(setting.name),
+                      expected.resolved(setting.name));
+            EXPECT_FALSE(solver.options().is_set(setting.name));
+            EXPECT_EQ(solver.options().get(setting.name),
+                      baseline.get(setting.name));
+          }
+          if (pure_fp)
+          {
+            for (const char* name :
+                 {"search-bias", "sat-phase", "sat-target", "sat-rephase",
+                  "kissat-stable", "kissat-probe", "cadical-factor",
+                  "kissat-batch-only", "kissat-greedy-growth"})
+            {
+              EXPECT_EQ(solver.options().resolved(name), baseline.get(name))
+                  << name;
+            }
+          }
         }
-      }
+    }
   }
 }
 
@@ -1925,10 +1974,11 @@ TEST(OptionEffects, fp_batch_defaults_preserve_explicit_baseline_values)
   {
     if (!has_sat_backend(backend))
       continue;
-    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+    const bool kissat = std::string(backend) == "kissat";
+    for (const char* logic : fp_batch_logics(kissat))
       for (const bool parsed : {false, true})
         for (const auto& setting :
-             fp_batch_settings(std::string(backend) == "kissat"))
+             fp_batch_settings(kissat, std::string(logic) == "QF_FP"))
         {
           SCOPED_TRACE(backend);
           SCOPED_TRACE(logic);
@@ -1959,6 +2009,53 @@ TEST(OptionEffects, fp_batch_defaults_preserve_explicit_baseline_values)
   }
 }
 
+TEST(OptionEffects, copying_fp_batch_options_does_not_copy_automatic_values)
+{
+  if (!has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "Kissat is not compiled in";
+  }
+  const Options baseline;
+  const auto settings = fp_batch_settings(true, true);
+  TermManager tm;
+  Options options;
+  options.set_str("sat-backend", "kissat");
+  options.set_str("logic", "QF_FP");
+  Solver solver(tm, options);
+  const Term x = tm.declare("pure_fp_copy_x", tm.mk_bv_sort(8));
+  solver.add(x == 1);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  Options copied = solver.options().copy();
+  for (const auto& setting : settings)
+  {
+    EXPECT_FALSE(copied.is_set(setting.name));
+    EXPECT_EQ(copied.get(setting.name), baseline.get(setting.name));
+  }
+  copied.reset("logic");
+  Solver other(tm, copied);
+  other.add(x == 2);
+  ASSERT_TRUE(other.check_sat().is_sat());
+  for (const auto& setting : settings)
+    EXPECT_EQ(other.options().resolved(setting.name),
+              baseline.get(setting.name));
+  EXPECT_FALSE(flags_after(tm).kissat_adaptive_cnf);
+  EXPECT_EQ(flags_after(tm).kissat_import_order, 0);
+  EXPECT_EQ(flags_after(tm).kissat_incremental_greedy, 0);
+  solver.reset_assertions();
+  solver.add(x == 3);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).kissat_adaptive_cnf);
+  EXPECT_EQ(flags_after(tm).kissat_import_order, 2);
+  EXPECT_EQ(flags_after(tm).kissat_incremental_greedy, 2);
+  solver.reset();
+  solver.options().reset("logic");
+  solver.add(x == 4);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  for (const auto& setting : settings)
+    EXPECT_EQ(solver.options().resolved(setting.name),
+              baseline.get(setting.name));
+}
+
 TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
 {
   if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
@@ -1970,8 +2067,11 @@ TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
   {
     if (!has_sat_backend(backend))
       continue;
-    const auto settings = fp_batch_settings(std::string(backend) == "kissat");
-    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+    const bool kissat = std::string(backend) == "kissat";
+    for (const char* logic : fp_batch_logics(kissat))
+    {
+      const bool pure_fp = std::string(logic) == "QF_FP";
+      const auto settings = fp_batch_settings(kissat, pure_fp);
       for (const bool parsed : {false, true})
       {
         SCOPED_TRACE(backend);
@@ -1990,8 +2090,13 @@ TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
         add_tuning_fp_problem(tm, solver, std::string(logic) == "QF_ABVFP");
         ASSERT_TRUE(solver.check_sat().is_sat());
         EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
-        EXPECT_EQ(flags_after(tm).cadical_factor,
-                  stp::UserDefinedFlags::BVAMode::OFF);
+        for (const auto& setting : settings)
+        {
+          Options expected;
+          expected.set(setting.name, setting.value);
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    expected.get(setting.name));
+        }
         solver.push();
         ASSERT_TRUE(solver.check_sat().is_sat());
         EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
@@ -2007,6 +2112,7 @@ TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
           EXPECT_EQ(solver.options().resolved(setting.name),
                     baseline.resolved(setting.name));
       }
+    }
   }
 }
 
@@ -2021,7 +2127,8 @@ TEST(OptionEffects, fp_batch_defaults_respect_opt_out_and_named_search)
   {
     if (!has_sat_backend(backend))
       continue;
-    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+    const bool kissat = std::string(backend) == "kissat";
+    for (const char* logic : fp_batch_logics(kissat))
       for (const char* policy : {"off", "none", "sat", "unsat"})
       {
         SCOPED_TRACE(backend);
@@ -2043,11 +2150,21 @@ TEST(OptionEffects, fp_batch_defaults_respect_opt_out_and_named_search)
         if (off)
         {
           for (const auto& setting :
-               fp_batch_settings(std::string(backend) == "kissat"))
+               fp_batch_settings(kissat, std::string(logic) == "QF_FP"))
           {
             SCOPED_TRACE(setting.name);
             EXPECT_EQ(solver.options().resolved(setting.name),
                       baseline.get(setting.name));
+          }
+        }
+        else if (std::string(logic) == "QF_FP")
+        {
+          for (const auto& setting : fp_batch_settings(true, true))
+          {
+            Options expected;
+            expected.set(setting.name, setting.value);
+            EXPECT_EQ(solver.options().resolved(setting.name),
+                      expected.get(setting.name));
           }
         }
       }
@@ -2065,7 +2182,8 @@ TEST(OptionEffects, batch_defaults_yield_to_first_assumptions_and_core_requests)
   {
     if (!has_sat_backend(backend))
       continue;
-    for (const char* logic : {"QF_BV", "QF_ABV", "QF_BVFP", "QF_ABVFP"})
+    for (const char* logic :
+         {"QF_BV", "QF_ABV", "QF_BVFP", "QF_ABVFP", "QF_FP"})
       for (const std::string request : {"assuming", "assuming-empty", "cores"})
       {
         SCOPED_TRACE(backend);
@@ -2124,6 +2242,12 @@ TEST(OptionEffects, batch_defaults_yield_to_first_assumptions_and_core_requests)
           EXPECT_EQ(flags.array_late_expansion_limit, 200u);
           EXPECT_EQ(flags.array_late_congruence_limit, 4000u);
           EXPECT_FALSE(flags.array_equality_gia_cnf);
+          if (std::string(logic) == "QF_FP")
+          {
+            EXPECT_EQ(solver.options().resolved("kissat-incremental-greedy"),
+                      baseline.get("kissat-incremental-greedy"));
+            EXPECT_EQ(flags.kissat_incremental_greedy, 0);
+          }
           if (std::string(logic) == "QF_BVFP" ||
               std::string(logic) == "QF_ABVFP")
           {

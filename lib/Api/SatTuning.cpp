@@ -77,6 +77,10 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
                                         {{"sat-phase", "0"},
                                          {"bv-conditional-equality", "true"},
                                          {"bv-double-equality", "true"}}};
+  static const Profile kissat_fp_batch{"kissat-qf-fp-batch",
+                                       {{"kissat-adaptive-cnf", "true"},
+                                        {"kissat-import-order", "2"},
+                                        {"kissat-incremental-greedy", "2"}}};
   static const Profile kissat_abv_batch{
       "kissat-qf-abv-batch",
       {{"cadical-factor", "off"},
@@ -175,6 +179,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     return kissat_bv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_BV" && !incremental)
     return cadical_bv_batch;
+  if (backend == Flags::KISSAT_SOLVER && logic == "QF_FP" && !incremental)
+    return kissat_fp_batch;
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_ABV" && !incremental)
     return kissat_abv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
