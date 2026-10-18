@@ -651,7 +651,7 @@ TEST(OptionEffects,
   const Term x = tm.declare("cadical_batch_copy_x", tm.mk_bv_sort(8));
   original.add(x == 1);
   ASSERT_TRUE(original.check_sat().is_sat());
-  Options copied(original.options());
+  Options copied = original.options().copy();
   for (const auto& setting : cadical_abv_batch_settings)
   {
     EXPECT_FALSE(copied.is_set(setting.name));
