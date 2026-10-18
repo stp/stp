@@ -30,6 +30,13 @@ applies to every SAT backend and is disabled by default. Set it before the
 first check; the SMT-LIB spelling is
 ``(set-option :bv-conditional-equality true)``.
 
+``--bv-double-equality=true`` cancels a shared addend in equalities of the
+form ``x + y = 2*x``, yielding ``y = x`` with modular arithmetic. The rewrite
+recognises multiplication and left shifts, including their normalised
+concat/extract form. It applies to every SAT backend and is disabled by
+default. Set it before the first check; the SMT-LIB spelling is
+``(set-option :bv-double-equality true)``.
+
 Input
 -----
 

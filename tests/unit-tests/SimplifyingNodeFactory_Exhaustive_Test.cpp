@@ -395,6 +395,104 @@ TEST(SimplifyingNodeFactory_Exhaustive,
     }
 }
 
+TEST(SimplifyingNodeFactory_Exhaustive, doubled_operand_equality)
+{
+  Context c;
+  c.mgr.UserFlags.enable_double_equality = true;
+  for (unsigned width : {1u, 2u, 3u, 4u, 5u, 6u})
+  {
+    SCOPED_TRACE(width);
+    const ASTNode x = c.bv(width), y = c.bv(width);
+    const ASTNode one = c.mgr.CreateOneConst(width);
+    const ASTNode two = c.konst(2, width);
+    const ASTVec doubles{c.hf->CreateTerm(BVLEFTSHIFT, width, x, one),
+                         c.nf->CreateTerm(BVLEFTSHIFT, width, x, one),
+                         c.hf->CreateTerm(BVMULT, width, x, two),
+                         c.nf->CreateTerm(BVMULT, width, two, x)};
+    for (bool reverse : {false, true})
+    {
+      const ASTNode sum = reverse ? c.hf->CreateTerm(BVPLUS, width, y, x)
+                                  : c.hf->CreateTerm(BVPLUS, width, x, y);
+      for (const ASTNode& twice : doubles)
+      {
+        c.checkNode(EQ, {sum, twice}, width > 1);
+        c.checkNode(EQ, {twice, sum}, width > 1);
+      }
+      c.checkNode(EQ, {sum, c.hf->CreateTerm(BVLEFTSHIFT, width, x, two)},
+                  false);
+      if (width <= 3)
+      {
+        const ASTNode z = c.bv(width);
+        c.checkNode(EQ, {sum, c.hf->CreateTerm(BVLEFTSHIFT, width, z, one)},
+                    false);
+        c.checkNode(EQ, {sum, c.hf->CreateTerm(BVSRSHIFT, width, x, one)},
+                    false);
+        const ASTNode nary = c.hf->CreateTerm(BVPLUS, width, ASTVec{x, y, z});
+        c.checkNode(EQ, {nary, doubles.front()}, false);
+      }
+    }
+  }
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, doubled_operand_equality_wide)
+{
+  Context c;
+  c.mgr.UserFlags.enable_double_equality = true;
+  for (unsigned width : {2u, 32u, 65u, 20000u})
+  {
+    const ASTNode x = c.bv(width), y = c.bv(width);
+    const ASTNode equal = c.nf->CreateNode(EQ, x, y);
+    const ASTNode sum = c.nf->CreateTerm(BVPLUS, width, x, y);
+    const ASTNode twice =
+        c.nf->CreateTerm(BVLEFTSHIFT, width, x, c.mgr.CreateOneConst(width));
+    const ASTNode result = c.nf->CreateNode(EQ, sum, twice);
+    EXPECT_EQ(equal, result);
+    EXPECT_EQ(c.nf->CreateNode(AND, result, c.nf->CreateNode(NOT, equal)),
+              c.mgr.ASTFalse);
+  }
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, double_shift_cancellation_is_iterative)
+{
+  Context c;
+  c.mgr.UserFlags.enable_double_equality = true;
+  const unsigned width = 8;
+  const ASTNode x = c.bv(width), y = c.bv(width);
+  const ASTNode equal = c.nf->CreateNode(EQ, x, y);
+  const ASTNode one = c.mgr.CreateOneConst(width);
+  ASTNode lhs = x, rhs = y;
+  for (unsigned i = 0; i < 10000; i++)
+  {
+    const ASTNode previous = lhs;
+    lhs = c.hf->CreateTerm(BVPLUS, width, lhs, rhs);
+    rhs = c.hf->CreateTerm(BVLEFTSHIFT, width, previous, one);
+  }
+  const ASTNode result = c.nf->CreateNode(EQ, lhs, rhs);
+  // Report IDs rather than printing a deeply nested formula on failure.
+  EXPECT_EQ(equal.GetNodeNum(), result.GetNodeNum());
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, double_equality_is_opt_in)
+{
+  const UserDefinedFlags defaults;
+  EXPECT_FALSE(defaults.enable_double_equality);
+  Context c;
+  const unsigned width = 8;
+  const ASTNode x = c.bv(width), y = c.bv(width);
+  const ASTNode sum = c.hf->CreateTerm(BVPLUS, width, x, y);
+  const ASTNode twice =
+      c.hf->CreateTerm(BVLEFTSHIFT, width, x, c.mgr.CreateOneConst(width));
+  const ASTNode before = c.hf->CreateNode(EQ, sum, twice);
+  EXPECT_EQ(before, c.nf->CreateNode(EQ, sum, twice));
+  c.mgr.UserFlags.enable_double_equality = true;
+  const ASTNode reduced = c.nf->CreateNode(EQ, sum, twice);
+  EXPECT_NE(before, reduced);
+  c.checkEquivalent(before, reduced);
+  c.mgr.UserFlags.disableSimplifications();
+  EXPECT_FALSE(c.mgr.UserFlags.enable_double_equality);
+  EXPECT_EQ(before, c.nf->CreateNode(EQ, sum, twice));
+}
+
 /* The overflow predicates: a constant, identical or complemented operand
    turns the widened adder or multiplier into a comparison; bvusubo is bvult. */
 TEST(SimplifyingNodeFactory_Exhaustive, overflow_predicates)
