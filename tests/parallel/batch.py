@@ -209,8 +209,8 @@ with tempfile.TemporaryDirectory(prefix='stpp-batch-') as temp:
                         str(paths[0][0])], capture_output=True, text=True, timeout=30)
     assert p.returncode == 2 and 'ordinary-route' in p.stderr, p
     clean()
-    # No fork point: ten symbolic array reads survive simplification, so the
-    # check may refine and the library offers no point. The owner's check
+    # No fork point: disable late eager expansion so ten symbolic array reads
+    # survive simplification and the library offers no point. The owner's check
     # searches in place -- one check, encoded once -- as -j1's does, with
     # and without the hedge.
     reads = ''.join(f'(declare-fun i{k} () (_ BitVec 32))' for k in range(10))
@@ -219,7 +219,8 @@ with tempfile.TemporaryDirectory(prefix='stpp-batch-') as temp:
         total = f'(bvadd {total} (select a i{k}))'
     for value, expected in (('#x7f', 'sat'),):
         refusing = temp / 'reads.smt2'
-        refusing.write_text('(set-logic QF_ABV)(declare-fun a () (Array (_ BitVec 32) (_ BitVec 8)))'
+        refusing.write_text('(set-logic QF_ABV)(set-option :array-late-read-limit 0)'
+                            '(declare-fun a () (Array (_ BitVec 32) (_ BitVec 8)))'
                             + reads + f'(assert (= {total} {value}))(check-sat)')
         alone = subprocess.run([binary, '-j1', '--timeout', '30', str(refusing)],
                                capture_output=True, text=True, timeout=60)
