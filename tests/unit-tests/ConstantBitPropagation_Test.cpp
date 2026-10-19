@@ -25,6 +25,13 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <gtest/gtest.h>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphConstantBitPropagation.h"
+#endif
+
+
 
   const std::string start_input = R"(
   (set-logic QF_BV)
@@ -76,12 +83,17 @@ struct Context
       ASTNode n = mgr.CreateNode(stp::AND, mgr.GetAsserts());
       std::cerr << "Pre cbitp " << n;
 
+#ifdef STP_TEST_PASSES_ON_GRAPH
+    stp::GraphConstantBitPropagation cb(&mgr);
+    n = cb.topLevel(n, &simplifier);
+#else
     simplifier::constantBitP::ConstantBitPropagation cb(
         &mgr, &simplifier, mgr.defaultNodeFactory, n);
     if (cb.isUnsatisfiable())
       n = mgr.ASTFalse;
     else
       n = cb.topLevelBothWays(n);
+#endif
 
     if (simplifier.hasUnappliedSubstitutions())
     {

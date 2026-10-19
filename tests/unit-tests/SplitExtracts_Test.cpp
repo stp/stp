@@ -28,6 +28,16 @@ THE SOFTWARE.
 #include <string>
 #include <vector>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphRulePasses.h"
+typedef stp::GraphSplitExtracts SplitExtractsImpl;
+#else
+typedef stp::SplitExtracts SplitExtractsImpl;
+#endif
+
+
 
   const std::string start_input = R"(
   (set-logic QF_BV)
@@ -57,7 +67,7 @@ struct Context
    stp::Cpp_interface interface;
    stp::SubstitutionMap substitutionMap;
    stp::Simplifier simplifier;
-   stp::SplitExtracts split;
+   SplitExtractsImpl split;
 
    Context() :
    snf (*(mgr.hashingNodeFactory), mgr),

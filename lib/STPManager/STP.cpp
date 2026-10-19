@@ -68,8 +68,13 @@ THE SOFTWARE.
 #include "stp/Simplifier/CongruenceCandidates.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
+#include "stp/Simplifier/GraphConstantBitPropagation.h"
+#include "stp/Simplifier/GraphRulePasses.h"
+#include "stp/Simplifier/StrengthReducingNodeFactory.h"
+#include "stp/Simplifier/MutableGraph.h"
 #include "stp/Simplifier/MergeSame.h"
 #include "stp/Util/DagWalk.h"
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <map>
@@ -295,6 +300,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
     const bool saved = bm->UserFlags.uf_inject_args;
     bm->UserFlags.uf_inject_args = false;
+    forgetFixedPoints();
     // A second run of the pipeline is a second solve, and every solve reaches
     // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
     // clears them in Cpp_interface::resetSolver, and the API before each of
@@ -313,6 +319,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     ClearAllTables();
     const SOLVER_RETURN_TYPE second = topLevelSTPOnce(inputasserts, query, deadline);
     bm->UserFlags.uf_inject_args = saved;
+    forgetFixedPoints();
     bm->clearInjectivityAssumed();
     skeletonAsked = false;
     return second;
@@ -751,15 +758,39 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
                               NodeDomainAnalysis* domain
                               )
 {
-  while (true)
+  unsigned rounds = 0;
+  while (!knownFixedPoint(inputToSat))
   {
     ASTNode last = inputToSat;
-    inputToSat = sizeReducing(last, bvSolver, pe, domain);
+    if (bm->UserFlags.passes_on_graph)
+      inputToSat = sizeReducingOnGraph(last, bvSolver, pe, domain);
+    else
+      inputToSat = sizeReducing(last, bvSolver, pe, domain);
+    rounds++;
     if (last == inputToSat)
       break;
   }
+  // The last round is the one that changed nothing.
+  if (bm->UserFlags.stats_flag)
+    std::cerr << "{sizeReducing} rounds to the fixed point: " << rounds << std::endl;
 
   return inputToSat;
+}
+
+bool STP::knownFixedPoint(const ASTNode& n) const
+{
+  return std::find(sizeReducingFixedPoints.begin(),
+                   sizeReducingFixedPoints.end(),
+                   n) != sizeReducingFixedPoints.end();
+}
+
+void STP::rememberFixedPoint(const ASTNode& n)
+{
+  if (knownFixedPoint(n))
+    return;
+  if (sizeReducingFixedPoints.size() == maxSizeReducingFixedPoints)
+    sizeReducingFixedPoints.erase(sizeReducingFixedPoints.begin());
+  sizeReducingFixedPoints.push_back(n);
 }
 
 // These transformations should never increase the size of the DAG.
@@ -797,21 +828,28 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
   
+  // The strength reductions run over the whole formula once, then ride
+  // on RemoveUnconstrained's graph: every node that pass builds is
+  // reduced as it is made, and a patched node's ancestors are re-reduced
+  // while their domains change. One graph, one export, both passes.
+  const bool reduce = bm->UserFlags.enable_use_intervals &&
+                      bm->UserFlags.bitConstantProp_flag;
+  StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
+  if (reduce)
+  {
+    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
+    inputToSat = sr.topLevel(inputToSat, *domain);
+    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
+    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
+  }
+
   if (bm->UserFlags.enable_unconstrained)
   {
     RemoveUnconstrained r1(*bm);
+    if (reduce)
+      r1.withStrengthReduction(&sr, domain);
     inputToSat = r1.topLevel(inputToSat, simp);
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
-  }
-
-  if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
-  {
-    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
-    StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
-    inputToSat = sr.topLevel(inputToSat, *domain);
-    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
-
-    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.enable_pure_literals)
@@ -862,6 +900,180 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     Rewriting rewrite(bm,bm->defaultNodeFactory);
     inputToSat = rewrite.topLevel(inputToSat);
     bm->ASTNodeStats("After Sharing-aware rewriting: ", inputToSat);
+  }
+
+  // I suspect this could increase the size.
+  if (bm->UserFlags.wordlevel_solve_flag)
+  {
+    inputToSat = bvSolver->TopLevelBVSolve(inputToSat, false);
+    bm->ASTNodeStats(bitvec_message.c_str(), inputToSat);
+  }
+
+  return inputToSat;
+}
+
+// sizeReducing with everything that has a graph version on the graph
+// (--passes-on-graph): one graph for the constant bit propagation, the
+// unconstrained pass with the equalities on it, and every pass after (pure
+// literals, split extracts, merge same, flattening, common-factor
+// extraction, rewriting), imported once after the first strength reduction
+// and exported once at the end,
+// with the strength reductions installed on it. A copy of sizeReducing differing in those
+// places, kept while the two are measured against each other.
+ASTNode STP::sizeReducingOnGraph(ASTNode inputToSat, 
+                          BVSolver* bvSolver,
+                          PropagateEqualities* pe,
+                          NodeDomainAnalysis* domain
+                          )
+{
+
+  if (bm->UserFlags.skeleton_preproc && !skeletonAsked)
+  {
+    skeletonAsked = true;
+    // What the Boolean structure settles on its own, conjoined to the query
+    // so that the passes below can act on it. Every fact is already implied
+    // -- this makes it visible, which is the whole point: a forced equality
+    // is one PropagateEqualities can substitute, where the same equality
+    // buried inside an implication is not.
+    bool skeletonUnsat = false;
+    SkeletonPreproc skeleton(bm);
+    ASTVec facts = skeleton.derive(inputToSat, skeletonUnsat);
+    if (skeletonUnsat)
+      return bm->CreateNode(FALSE); // the structure alone refutes the query
+    if (!facts.empty())
+    {
+      facts.push_back(inputToSat);
+      inputToSat = bm->defaultNodeFactory->CreateNode(AND, facts);
+      bm->ASTNodeStats("After Skeleton Preprocessing: ", inputToSat);
+    }
+  }
+
+  // With RemoveUnconstrained on, the equalities are propagated on its
+  // graph, in the same round and without the rebuild. Off by default
+  // with the rest of --passes-on-graph: on formulas with hundreds of
+  // thousands of top-level equalities the conversion of the region above
+  // them costs more than the rebuild.
+  const bool equalitiesOnGraph = bm->UserFlags.propagate_equalities &&
+                                 bm->UserFlags.enable_unconstrained;
+  if (bm->UserFlags.propagate_equalities && !equalitiesOnGraph)
+  {
+    inputToSat = pe->topLevel(inputToSat);
+    bm->ASTNodeStats(pe_message.c_str(), inputToSat);
+  }
+  
+  // The strength reductions run over the whole formula once, then ride
+  // on RemoveUnconstrained's graph: every node that pass builds is
+  // reduced as it is made, and a patched node's ancestors are re-reduced
+  // while their domains change. One graph, one export, both passes.
+  const bool reduce = bm->UserFlags.enable_use_intervals &&
+                      bm->UserFlags.bitConstantProp_flag;
+  StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
+  if (reduce)
+  {
+    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
+    inputToSat = sr.topLevel(inputToSat, *domain);
+    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
+    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
+  }
+
+  // One graph from here to the end of the round: the constant bit
+  // propagation, the unconstrained pass (with the equalities on its graph),
+  // pure literals and split extracts
+  // (which substitute symbols and record definitions), merge same,
+  // flattening, common-factor extraction and rewriting, imported once and
+  // exported once. The strength reductions ride on it, as on the
+  // unconstrained pass's graph: every node built is reduced as it is
+  // made; each pass says whether its edits can widen a node's values,
+  // which decides whether a patched node's domains are recomputed while
+  // it runs. Flattening runs before the extraction
+  // because the extraction reads the n-ary products it builds, and both
+  // belong here rather than beside the same-kind extraction later:
+  // everything after the difficulty snapshot is reverted together unless
+  // the round takes a fifth off the score, which a few percent of
+  // multiplications removed does not reach on its own. Each pass prints
+  // its own stage line over the graph's current formula.
+  const bool definesSymbols = bm->UserFlags.bitConstantProp_flag ||
+                              bm->UserFlags.enable_unconstrained ||
+                              bm->UserFlags.enable_pure_literals ||
+                              bm->UserFlags.enable_split_extracts;
+  if (definesSymbols || bm->UserFlags.enable_merge_same ||
+      bm->UserFlags.enable_flatten || bm->UserFlags.enable_common_factor ||
+      bm->UserFlags.enable_sharing_aware_rewriting)
+  {
+    // A symbol those passes define must not already be a key of the map;
+    // after applying any pending substitutions none in the formula is.
+    if (definesSymbols && simp->hasUnappliedSubstitutions())
+      inputToSat = simp->applySubstitutionMap(inputToSat);
+    MutableGraph graph(*bm);
+    graph.import(inputToSat);
+    std::unique_ptr<StrengthReducingNodeFactory> reducingLayer;
+    NodeFactory* reducerFactoryBefore = NULL;
+    if (reduce)
+    {
+      reducerFactoryBefore = sr.factory();
+      sr.setFactory(&graph.simplifyingFactory());
+      reducingLayer.reset(new StrengthReducingNodeFactory(
+          *bm, graph.simplifyingFactory(), sr, *domain));
+      graph.installReducer(*reducingLayer, *domain);
+    }
+    // The constant bit propagation first, with the root asserted: what it
+    // fixes is substituted or pinned before the other passes look. In the
+    // rebuild path it runs before this round (TopLevelSTPAux); here it
+    // comes after the first strength reduction, which is before the import.
+    if (bm->UserFlags.bitConstantProp_flag)
+    {
+      GraphConstantBitPropagation cb(bm);
+      cb.topLevel(graph, simp);
+    }
+    if (bm->UserFlags.enable_unconstrained)
+    {
+      RemoveUnconstrained r1(*bm);
+      if (equalitiesOnGraph)
+        r1.withEqualities(pe);
+      r1.topLevel(graph, simp);
+    }
+    if (bm->UserFlags.enable_pure_literals)
+    {
+      GraphFindPureLiterals pure(bm);
+      pure.topLevel(graph, simp);
+    }
+    if (bm->UserFlags.enable_split_extracts)
+    {
+      GraphSplitExtracts split(*bm);
+      split.topLevel(graph, simp);
+    }
+    if (bm->UserFlags.enable_merge_same)
+    {
+      GraphMergeSame same(bm);
+      same.topLevel(graph);
+    }
+    if (bm->UserFlags.enable_flatten)
+    {
+      GraphFlatten flatten(bm);
+      flatten.topLevel(graph);
+    }
+    if (bm->UserFlags.enable_common_factor)
+    {
+      GraphCommonFactor factor(bm);
+      factor.topLevel(graph);
+    }
+    if (bm->UserFlags.enable_sharing_aware_rewriting)
+    {
+      GraphRewriting rewrite(bm);
+      rewrite.topLevel(graph);
+    }
+    inputToSat = graph.exportRoot();
+    // The root conjunction is usually too wide for the graph's rules, so
+    // conjuncts that became TRUE are still in it; one pass of the
+    // simplifying factory over the root drops them.
+    if (inputToSat.GetKind() == AND)
+      inputToSat = bm->defaultNodeFactory->CreateNode(AND, inputToSat.GetChildren());
+    if (reduce)
+    {
+      sr.setFactory(reducerFactoryBefore);
+      domain->forgetMutable();
+      inputToSat = sr.finish(inputToSat, *domain);
+    }
   }
 
   // I suspect this could increase the size.
@@ -1364,12 +1576,23 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // bit-blaster's recursion has to follow level by level.
   if (bm->UserFlags.enable_flatten)
   {
-    Flatten flatten(bm,bm->defaultNodeFactory);
-    inputToSat = flatten.topLevel(inputToSat);
+    if (bm->UserFlags.passes_on_graph)
+    {
+      GraphFlatten flatten(bm);
+      inputToSat = flatten.topLevel(inputToSat);
+    }
+    else
+    {
+      Flatten flatten(bm,bm->defaultNodeFactory);
+      inputToSat = flatten.topLevel(inputToSat);
+    }
     bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
   }
 
-  if (!lraActive && bm->UserFlags.bitConstantProp_flag)
+  // With --passes-on-graph the propagation is the first pass on the
+  // round's graph (sizeReducingOnGraph) instead.
+  if (!lraActive && bm->UserFlags.bitConstantProp_flag &&
+      !bm->UserFlags.passes_on_graph)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
@@ -1392,9 +1615,36 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Boolean symbols and remember those assignments only in model-replay
   // tables; an opaque theory atom must instead remain in the SAT candidate so
   // a verified no-good can constrain the same literal on the next round.
-  if (!lraActive)
-    inputToSat =
-        sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
+  // A round that hands its input back has shown the formula to be a fixed
+  // point of the passes, and recorded nothing on the way (every definition
+  // comes with a change to the formula), so the repeat below has nothing
+  // to find. Over the suite that is the case for six calls in ten. A
+  // formula an earlier query already found to be one is skipped outright:
+  // a query the passes above reduce to a constant, or one that differs
+  // from an earlier query by a definition they substituted away.
+  bool atFixedPoint = false;
+  if (!lraActive && knownFixedPoint(inputToSat))
+  {
+    atFixedPoint = true;
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "{sizeReducing} the formula is a known fixed point, "
+                   "skipping the round"
+                << std::endl;
+  }
+  else if (!lraActive)
+  {
+    const ASTNode before = inputToSat;
+    if (bm->UserFlags.passes_on_graph)
+      inputToSat = sizeReducingOnGraph(inputToSat, bvSolver.get(), pe.get(),
+                                       domain.get());
+    else
+      inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(),
+                                domain.get());
+    atFixedPoint = (before == inputToSat);
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "{sizeReducing} first round changed the formula: "
+                << (atFixedPoint ? "no" : "yes") << std::endl;
+  }
 
   // Difficulty reversion asks whether the word-level simplifiers left the
   // formula harder than they found it, and puts it back if they did. An
@@ -1410,22 +1660,28 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // run the apparatus rather than pay for it to do nothing.
   const bool difficultyReversionApplies = !lraActive;
 
+  // The scorer's evaluation count is cumulative, and under -s it has
+  // already scored the input, so take what this scoring adds: the non-leaf
+  // nodes of the formula as it stands.
+  const int64_t evaluatedBefore = difficulty.getEvalCount();
   int64_t initial_difficulty_score =
       difficultyReversionApplies ? difficulty.score(inputToSat, bm) : 0;
-
-  // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
-  const int64_t initial_node_size = difficulty.getEvalCount();
+  const int64_t initial_node_size =
+      difficulty.getEvalCount() - evaluatedBefore;
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
   // so it's expensive to call.
-  if (!lraActive && !arrayops &&
+  if (!lraActive && !atFixedPoint &&
       (-1 == bm->UserFlags.size_reducing_fixed_point ||
        initial_node_size < bm->UserFlags.size_reducing_fixed_point))
   {
     inputToSat =
         callSizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
+    atFixedPoint = true;
   }
+  if (atFixedPoint)
+    rememberFixedPoint(inputToSat);
 
   // Lower floating-point operations before the first pass that invokes the
   // bit-blaster. From here on the formula is a packed-bit circuit: float

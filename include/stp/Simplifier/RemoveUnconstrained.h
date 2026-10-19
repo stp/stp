@@ -31,13 +31,17 @@ THE SOFTWARE.
 #ifndef REMOVEUNCONSTRAINED_H_
 #define REMOVEUNCONSTRAINED_H_
 #include "stp/AST/AST.h"
-#include "stp/AST/MutableASTNode.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/AchievableImage.h"
+#include "stp/Simplifier/MutableGraph.h"
 #include "stp/Simplifier/Simplifier.h"
+#include <unordered_map>
 
 namespace stp
 {
+class StrengthReduction;
+class NodeDomainAnalysis;
+class PropagateEqualities;
 
 class RemoveUnconstrained
 {
@@ -45,21 +49,99 @@ class RemoveUnconstrained
 
   ASTNode freshLike(const ASTNode& like, const std::string& prefix);
 
-  ASTNode replaceParentWithFresh(MutableASTNode& mute,
-                                 vector<MutableASTNode*>& variables);
+  // The formula during topLevel_other(): edits are made on the graph, and
+  // the rules read parents, children and counts from it. Handles are the
+  // graph's: a node's children are read through kidsOf(), which follows
+  // replacements. Terms that go back into the formula are built with gf,
+  // the graph's factory; terms recorded as definitions are built with nf
+  // over exported (hash-consed) operands.
+  MutableGraph* g = NULL;
+  NodeFactory* gf = NULL;
+
+  // Symbols that must never be reported unconstrained, however few
+  // occurrences they have: the array-equality procedure's anchors, the
+  // UF and floating-point abstraction's proxies, symbols the caller knows
+  // are constrained elsewhere. Installed for one topLevel() call.
+  const std::set<ASTNode>* untouchable = NULL;
+
+  // Symbols to examine. Fed by the graph's change log: a symbol whose
+  // parent count changed is a candidate again.
+  std::vector<ASTNode> worklist;
+  void drain();
+
+  // A collapse deferred because the predicate's other side held an
+  // unconstrained symbol, keyed by that symbol: when its count changes
+  // (it was eliminated, or gained a use), the deferred symbol is a
+  // candidate again. Without this a symbol examined once is never
+  // re-examined, and a second run of the pass finds work the first left.
+  std::unordered_map<uint64_t, std::vector<ASTNode>> deferredOn;
+  // Likewise a ground-path climb that stopped at a shared interior node,
+  // keyed by that node: when its count changes (it lost a parent), the
+  // symbol below it may climb further.
+  std::unordered_map<uint64_t, std::vector<ASTNode>> blockedOn;
+
+  // STP_CHECK_GRAPH in the environment: recount the graph from scratch
+  // after every edit, and trace. For the fuzzers; O(formula) per edit.
+  const bool checkGraph;
+
+  // A symbol with exactly one distinct parent, and not protected.
+  bool unconstrained(const ASTNode& n);
+  // Any node with exactly one distinct parent, and that parent.
+  bool singleParent(const ASTNode& n, ASTNode& parent);
+  // n's children as they are now.
+  void kidsOf(const ASTNode& n, ASTVec& out);
+  // The symbols under n.
+  void variablesIn(const ASTNode& n, std::vector<ASTNode>& out);
+  // node := a fresh symbol of its sort; returns the symbol.
+  ASTNode replaceWithFresh(const ASTNode& node);
+  // node := by in the formula.
+  void splice(const ASTNode& node, const ASTNode& by);
+  // The hash-consed form of a graph node, for a definition in the solver
+  // map. A node of the converted region is not rebuilt here: a fresh
+  // symbol stands for it in the definition, and every such symbol is
+  // defined at the end of the run from one shared export (the map
+  // resolves the chain). Hundreds of definitions over a region that is
+  // most of the formula would otherwise rebuild it hundreds of times.
+  ASTNode exported(const ASTNode& n);
+  std::vector<std::pair<ASTNode, ASTNode>> pendingExports_; // (symbol, handle)
+  void resolvePendingExports();
 
   ASTNode topLevel_other(const ASTNode& n, Simplifier* simplifier);
+  // The pass over a graph that already holds the formula: the worklist,
+  // the rules and the definitions, ending with the pending exports
+  // resolved. No import, no export, no reducer of its own.
+  void runOnGraph(MutableGraph& graph, Simplifier* simplifier);
+  // The symbols no rule may touch, from the formula as it stands.
+  void prepareUntouchable(const ASTNode& formula, Simplifier* simplifier,
+                          const std::set<ASTNode>* alsoUntouchable);
+  std::set<ASTNode> mergedUntouchable_;
+  // Refused definitions and image constraints join the formula at the
+  // graph's root, so the passes after this one on the same graph see
+  // them.
+  void conjoinAtRoot(MutableGraph& graph);
+  // A node built outside the graph during the run (a definition, a
+  // constraint) as a node of the graph: its operands brought to their
+  // current handles, fresh structure rebuilt through the graph's factory.
+  ASTNode throughGraph(MutableGraph& graph, const ASTNode& n);
+  // STP_CHECK_GRAPH: recount, and say where it went wrong.
+  void checkGraphAfter(MutableGraph& graph, const char* step);
 
-  bool tryGroundPathCollapse(MutableASTNode& muteNode,
-                             vector<MutableASTNode*>& variables);
+  bool tryGroundPathCollapse(const ASTNode& var);
 
-  bool tryImageConstrainShared(const ASTNode& var, MutableASTNode& sharedNode,
-                               const GroundStep& step,
-                               vector<MutableASTNode*>& variables);
+  bool tryImageConstrainShared(const ASTNode& var, const ASTNode& sharedNode,
+                               const GroundStep& step);
 
   // Membership constraints produced by tryImageConstrainShared during a
   // topLevel_other() run; conjoined onto the result before returning.
   ASTVec imageConstraints;
+  // How many a run made, for the fuzzer: a result with one is not a
+  // fixed point of the pass, since the next run sees the constraint as
+  // formula and the variable it constrains as free (category A in
+  // bench-hard/reports/2026-10-10-removeunconstrained-idempotence.md).
+  size_t imageConstraintsMade = 0;
+  StrengthReduction* reducer_ = NULL;
+  NodeDomainAnalysis* domains_ = NULL;
+  PropagateEqualities* equalities_ = NULL;
 
   // The untouchable set installed for the current topLevel() call, so
   // that tryImageConstrainShared can add its fresh variables to it: their
@@ -96,6 +178,18 @@ class RemoveUnconstrained
   bool arrayRules;
 
 public:
+  // Run the strength reductions on the graph as well: every node the
+  // pass builds is reduced as it is made, and a patched node's domains
+  // are recomputed and its ancestors re-reduced while they change.
+  void withStrengthReduction(StrengthReduction* sr, NodeDomainAnalysis* nda)
+  {
+    reducer_ = sr;
+    domains_ = nda;
+  }
+  // Propagate the top-level equalities on the same graph, before the
+  // unconstrained symbols are examined.
+  void withEqualities(PropagateEqualities* pe) { equalities_ = pe; }
+  size_t imageConstraintCount() const { return imageConstraintsMade; }
   RemoveUnconstrained(STPMgr& bm);
 	
   RemoveUnconstrained(RemoveUnconstrained const&) = delete;
@@ -108,6 +202,14 @@ public:
   // both apply.
   ASTNode topLevel(const ASTNode& n, Simplifier* s,
                    const std::set<ASTNode>* alsoUntouchable = NULL);
+  // The same over a graph the caller owns and keeps (--passes-on-graph):
+  // the caller has applied pending substitutions and installed the
+  // strength-reducing layer; the refused definitions and image constraints
+  // are conjoined at the graph's root; the whole-formula steps that follow
+  // the export (dropping TRUE conjuncts, the write-chain finish) are the
+  // caller's, after its own export.
+  void topLevel(MutableGraph& graph, Simplifier* s,
+                const std::set<ASTNode>* alsoUntouchable = NULL);
 };
 }
 

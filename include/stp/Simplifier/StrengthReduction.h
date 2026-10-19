@@ -109,6 +109,20 @@ public:
   // New style invocation.
   ASTNode topLevel(const ASTNode& top, NodeDomainAnalysis& nda);
 
+  // One node, already built over reduced children: its domains, the read
+  // chase and the three reductions. What visit does per node; also what
+  // the strength-reducing factory layer does to each node it hands out.
+  ASTNode reduceNode(const ASTNode& n, NodeDomainAnalysis& nda);
+  // The whole-formula step visit cannot do per node.
+  ASTNode finish(const ASTNode& top, NodeDomainAnalysis& nda)
+  {
+    return dropShadowedWrites(top, nda);
+  }
+  // Replacement nodes are built through this; a MutableGraph installs its
+  // own factory here while the reductions run over its nodes.
+  NodeFactory* factory() const { return nf; }
+  void setFactory(NodeFactory* f) { nf = f; }
+
  
     
   void stats(string name = "StrengthReduction");
