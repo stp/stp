@@ -85,6 +85,23 @@ set_tests_properties(stpp-cli stpp-lifecycle stpp-portfolio stpp-hedge
 set_tests_properties(stpp-batch stpp-group PROPERTIES TIMEOUT 600)
 set_tests_properties(stpp-lra PROPERTIES TIMEOUT 300)
 
+# The scripts again on Kissat, where it exchanges clauses beside a CaDiCaL
+# that does: the runs above take CaDiCaL (sanitizer.py adds --sat-backend).
+if(USE_KISSAT AND KISSAT_HAS_CLAUSE_EXCHANGE AND CADICAL_HAS_CLAUSE_IMPORT)
+  foreach(name cli lifecycle portfolio hedge batch lra encoding_groups group)
+    set(arguments $<TARGET_FILE:stp-p> $<TARGET_FILE:stpp-drive>)
+    if(name STREQUAL "group")
+      list(APPEND arguments 60)
+    endif()
+    add_test(NAME stpp-${name}-kissat COMMAND ${PYTHON_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/${name}.py ${arguments})
+    get_test_property(stpp-${name} TIMEOUT timeout)
+    set_tests_properties(stpp-${name}-kissat PROPERTIES LABELS "parallel"
+      TIMEOUT ${timeout}
+      ENVIRONMENT "STPP_SANITIZED=${STPP_SANITIZED};STPP_SAT_BACKEND=kissat")
+  endforeach()
+endif()
+
 # Differential-fuzzer report handling uses synthetic executables.
 add_test(NAME stpp-lra-differential COMMAND ${PYTHON_EXECUTABLE}
   ${PROJECT_SOURCE_DIR}/scripts/tests/lra-parallel-differential.py)

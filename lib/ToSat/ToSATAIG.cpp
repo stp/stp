@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/ShiftPrimes.h"
+#include "stp/Sat/Satsuma.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
@@ -395,7 +396,9 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
       (!needAbsRef || ufOnlyRefinement_ || realAdaptive) &&
       bm->expected_blast_ands > 0 &&
-      bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
+      (bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER ||
+       (bm->UserFlags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER &&
+        bm->UserFlags.kissat_adaptive_cnf)))
   {
     // Experimental Real policy. The Boolean skeleton is known before either
     // writer runs, so this decision does not inspect the input's name or the
@@ -678,6 +681,30 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
   QueryPhaseScope clause_time(bm->query_timing, QueryPhase::ClauseLoading);
   RunTimes::Scope clause_runtime(*bm->GetRunTimes(), RunTimes::SendingToSAT);
   PreparationPoller poll(bm->preparation_control, PreparationStage::ClauseLoading);
+
+  if (bm->UserFlags.kissat_batch_only && satsuma_allowed_ && !encode_only_ &&
+      requiredSolveAssumptions.empty() && satSolver.submittedClauses() == 0)
+  {
+    const bool configured = satSolver.configureOneShot();
+    if (bm->UserFlags.stats_flag)
+      cerr << "Kissat one-shot: " << (configured ? "on" : "declined") << endl;
+  }
+
+#if STP_BUILD_WITH_SATSUMA
+  if (bm->UserFlags.satsuma_mode != "off")
+  {
+    if (satsuma_allowed_ && !encode_only_ && requiredSolveAssumptions.empty() &&
+        satSolver.submittedClauses() == 0 &&
+        addSatsumaCnfToSolver(*bm, satSolver, cnf, shiftPrimeClauses_))
+    {
+      shiftPrimeClauses_.clear();
+      poll.check();
+      return;
+    }
+    if (bm->UserFlags.stats_flag)
+      cerr << "satsuma: skipped (partial/session encoding or size limit)" << endl;
+  }
+#endif
 
   // Create a new sat variable for each of the variables in the CNF.
   int satV = satSolver.nVars();

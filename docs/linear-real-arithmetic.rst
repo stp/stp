@@ -116,8 +116,9 @@ and from the next search on the theory takes part
 (``--lra-first-search`` connects it before the first search instead).
 Taking part needs a SAT backend that hosts an IPASIR-UP external
 propagator (``--lra-theory-propagation``, on by default). Those backends
-are CaDiCaL, and a CryptoMiniSat or a MiniSat (``--minisat``) built with
-the interface, as the pinned forks of both are. As atoms are
+are CaDiCaL, and a CryptoMiniSat, a MiniSat (``--minisat``) or a Kissat
+(``--kissat``) built with the interface, as the pinned forks of all three
+are. As atoms are
 assigned the theory checks the partial assignment, and it returns a
 conflict as a clause where it arises, rather than after a complete
 assignment has been built on top of it. By default it reports conflicts
@@ -138,8 +139,8 @@ for more than one thread, or the simplifying MiniSat
 proposes a complete assignment, the theory accepts it or returns a
 conflict, and the solver goes again.
 
-With the patched CaDiCaL 3.x that STP builds, and with a MiniSat that
-hosts the propagator, the theory also picks the
+With the patched CaDiCaL 3.x that STP builds, and with a MiniSat, a
+CryptoMiniSat or a Kissat that hosts the propagator, the theory also picks the
 polarity of the SAT solver's next decision on an arithmetic atom, the one
 the current assignment already satisfies (``--lra-decision-polarity``).
 It is on wherever it is supported. On other backends the option can be
@@ -319,8 +320,8 @@ Search and the float tier
 
 ``--lra-decision-polarity`` (on where supported)
   Pick the polarity of arithmetic decisions. It needs
-  ``--lra-theory-propagation`` and the patched CaDiCaL or a MiniSat that
-  hosts the propagator. ``=0`` restores
+  ``--lra-theory-propagation`` and the patched CaDiCaL or a MiniSat,
+  CryptoMiniSat or Kissat that hosts the propagator. ``=0`` restores
   the backend's own polarity, and an explicit ``=1`` without support is
   an error.
 

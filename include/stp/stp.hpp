@@ -813,7 +813,7 @@ struct STP_API_EXPORT OptionInfo
   std::string type; ///< bool|int|uint|mode|enum|set|string|path|duration
   OptionValue default_value;
   OptionValue current;
-  OptionValue resolved; ///< after implications
+  OptionValue resolved; ///< after implications and, on a solver, selected automatic defaults
   std::optional<std::int64_t> min, max;
   std::vector<std::string> values; ///< enum/set members
   Tier tier;
@@ -929,6 +929,8 @@ public:
   std::string get_str(std::string_view name) const;
   std::vector<std::string> get_names(std::string_view name) const;
   std::chrono::milliseconds get_duration(std::string_view name) const;
+  /// Effective value, including automatic SAT defaults once a check selects
+  /// its logic/session profile. get() and is_set() describe user options.
   OptionValue resolved(std::string_view name) const;
   bool is_set(std::string_view name) const;
   void reset(std::string_view name);
@@ -1202,8 +1204,8 @@ public:
   std::uint64_t variables() const;
   /// Connect `exchange` (not owned; nullptr disconnects) to this check's
   /// backend, exporting only clauses over the variables it holds now. false
-  /// when the backend cannot exchange clauses (CaDiCaL without STP's
-  /// clause-import extension). Arithmetic-only refinement is supported.
+  /// when the backend cannot exchange clauses (one without STP's extension:
+  /// CaDiCaL's clause import or Kissat's clause exchange). Arithmetic-only refinement is supported.
   /// A backend rebuild stops sharing because its variable numbering is
   /// private. The closing counters are the solver's sat.exchange.* statistics.
   bool connect_clause_exchange(ClauseExchange* exchange,

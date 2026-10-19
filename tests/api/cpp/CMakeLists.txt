@@ -41,6 +41,16 @@ AddSTPGTest(permanent-assertions.cpp)
 AddSTPGTest(real-sessions.cpp)
 AddSTPGTest(single-query.cpp)
 AddSTPGTest(before-search.cpp)
+target_compile_definitions(before-searchTests PRIVATE
+    STP_TEST_QUERY_DIR="${PROJECT_SOURCE_DIR}/tests/query-files")
+# The same checks on Kissat, where it exchanges clauses beside a CaDiCaL that
+# does: the run above takes CaDiCaL.
+if(USE_KISSAT AND KISSAT_HAS_CLAUSE_EXCHANGE AND USE_CADICAL)
+    add_test(NAME before-search-kissatTests-gtest COMMAND before-searchTests
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(before-search-kissatTests-gtest PROPERTIES
+        ENVIRONMENT "STP_TEST_SAT_BACKEND=kissat")
+endif()
 AddSTPGTest(solvers.cpp)
 AddSTPGTest(models.cpp)
 AddSTPGTest(array-fill-models.cpp)

@@ -582,6 +582,61 @@ void budgetRefusalIsNotAnError()
           "covers was not exercised");
 }
 
+/* The same refusal on the propagating path. A partial check the budget
+ * stops between changes leaves the core refusing new levels and bounds, and
+ * nothing gave up there: a search that went on assigning rather than
+ * backtracking (Kissat's order on fp-to-real/14) met the refusal at its next
+ * level, and the solve came back SOLVER_ERROR rather than unknown. A pivot
+ * budget of zero stops the check that way here; in a solve, where pivots
+ * are unbounded, the number limits do. */
+void partialCheckBudgetStopIsNotAnError()
+{
+  STPMgr manager;
+  Frontend frontend(manager);
+  LraAtomRegistry registry(manager);
+  auto frame = registry.pushAssertionFrame();
+  const auto x = manager.CreateSourceSymbol("partial_x", SourceSort::real());
+  const auto y = manager.CreateSourceSymbol("partial_y", SourceSort::real());
+  const auto z = manager.CreateSourceSymbol("partial_z", SourceSort::real());
+  // The row needs a pivot at the root; the strict bound waits for a level.
+  const auto formula = manager.CreateNode(AND, ASTVec{
+      manager.CreateRealPredicate(
+          REAL_GE, manager.CreateRealTerm(REAL_ADD, ASTVec{x, y}),
+          manager.CreateRealConst("2")),
+      manager.CreateRealPredicate(REAL_LT, z, manager.CreateRealConst("1"))});
+  registry.registerFormula(frontend.preregister(formula), frame);
+  auto snapshot = registry.frameSnapshot(frame);
+  std::unique_ptr<SATSolver> solver(createSATSolver(manager.UserFlags));
+  LraSolveContext context(registry, *solver, frontend.numberLimits(), frame,
+                          /*maximum_pivots=*/0);
+  context.setFloatDriver(false);
+  std::vector<LraSatBinding> bindings;
+  std::vector<SATSolver::Lit> root, later;
+  for (auto const& c : snapshot.components)
+  {
+    auto literal = SATSolver::mkLit(solver->newVar(), false);
+    bindings.push_back({c.opaque_atom, literal});
+    (c.relation == FrontendRelation::Less ? later : root).push_back(literal);
+  }
+  require(root.size() == 1 && later.size() == 1, "one bound per level");
+  require(context.bindOpaqueAtoms(bindings), "partial budget bindings");
+  LraCandidateAdapter adapter(context, *solver);
+  std::vector<uint32_t> observed;
+  require(adapter.beginTheoryPropagation(observed), "partial budget begins");
+  adapter.notifyAssigned(root);
+  std::vector<SATSolver::Lit> clause;
+  require(!adapter.takeClause(clause) && context.ready() &&
+              context.coreStatistics().resource_stops == 1,
+          "the budget stops the partial check, which decides nothing");
+  adapter.notifyNewLevel();
+  adapter.notifyAssigned(later);
+  require(adapter.failed(), "a core the budget stopped takes no new level");
+  require(context.status() == SolveContextStatus::ResourceLimit,
+          "a partial check the budget stopped is not a fault: " +
+              context.failureDetail());
+  adapter.endTheoryPropagation();
+}
+
 /* A refusal from an extension means two different things and the caller has
  * to be able to tell them apart.
  *
@@ -770,6 +825,7 @@ int main()
     reconstructionOrder();
     applicationModelInvariants();
     budgetRefusalIsNotAnError();
+    partialCheckBudgetStopIsNotAnError();
     extensionDeclineIsNotFailure();
 #if defined(USE_CADICAL)
     searchResetPreservesFormula();

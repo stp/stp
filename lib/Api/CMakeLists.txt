@@ -73,6 +73,7 @@ add_library(stpapi OBJECT
     Terms.cpp
     Construct.cpp
     Options.cpp
+    SatTuning.cpp
     Solver.cpp
     Model.cpp
     Library.cpp

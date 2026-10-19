@@ -314,7 +314,8 @@ static void options_and_limits()
   }
   OptionInfo info = o.info("incremental");
   CHECK(info.type == "mode" && info.tier == Tier::STABLE);
-  CHECK(o.names(Tier::STABLE).size() == 22);
+  CHECK(o.names(Tier::STABLE).size() ==
+        static_cast<std::size_t>(Option::NUM_STABLE_OPTIONS));
   Solver s(tm, o);
   s.options().set_str("logic", "QF_BV"); // before the first check: allowed
   CHECK(s.options().get_str("logic") == "QF_BV");

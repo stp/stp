@@ -49,13 +49,47 @@ using namespace stp;
 namespace
 {
 
-const bool exchange_available = capabilities()["sat.clause-exchange"] == "true";
+// The backend every check here runs on: STP_TEST_SAT_BACKEND's (CTest runs
+// these tests a second time on Kissat where both backends exchange
+// clauses), or else CaDiCaL where it is built, or else the build's default.
+std::string test_backend()
+{
+  const char* named = std::getenv("STP_TEST_SAT_BACKEND");
+  if (named && *named)
+    return named;
+  if (has_sat_backend("cadical"))
+    return "cadical";
+  return sat_backends().size() == 1 ? sat_backends().front() : "";
+}
+
+// Whether that backend exchanges clauses (and diversifies its search).
+bool backend_exchanges()
+{
+  const std::string list =
+      "," + capabilities()["sat.clause-exchange.backends"] + ",";
+  const std::string backend = test_backend();
+  return !backend.empty() &&
+         list.find("," + backend + ",") != std::string::npos;
+}
+const bool exchange_available = backend_exchanges();
+
+// Whether that backend hosts the arithmetic propagator: Kissat does with the
+// IPASIR-UP extension of STP's fork, and otherwise checks complete
+// assignments only.
+bool backend_hosts_theory()
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  return true;
+#else
+  return test_backend() != "kissat";
+#endif
+}
 
 Options batch_options()
 {
   Options o;
-  if (has_sat_backend("cadical"))
-    o.set("sat-backend", "cadical");
+  if (!test_backend().empty())
+    o.set("sat-backend", test_backend());
   return o;
 }
 
@@ -316,8 +350,78 @@ TEST(BeforeSearch, AnArithmeticHookKeepsItsCoordinatorsCallback)
   const long hooked = run(true, calls, outcome);
   EXPECT_EQ(outcome, "offered");
   EXPECT_EQ(calls, 1u);
-  EXPECT_GE(plain, 1);
+  if (backend_hosts_theory())
+    EXPECT_GE(plain, 1);
+  else
+    EXPECT_EQ(plain, 0); // Arithmetic runs on complete assignments.
   EXPECT_EQ(hooked, plain);
+}
+
+// Hands every learned clause back to the backend that learned it.
+struct Echo final : ClauseExchange
+{
+  std::vector<std::vector<int>> clauses;
+  std::size_t returned = 0;
+  void learned(const int* clause, std::size_t size) noexcept override
+  {
+    try
+    {
+      clauses.emplace_back(clause, clause + size);
+    }
+    catch (...)
+    {
+    }
+  }
+  bool next(std::vector<int>& clause) noexcept override
+  {
+    if (returned == clauses.size())
+      return false;
+    clause = clauses[returned++];
+    return true;
+  }
+};
+
+TEST(BeforeSearch, AnArithmeticCheckSharesClausesWhileItsTheoryPropagates)
+{
+  // A group's root on arithmetic: the coordinator joins the first search as
+  // a propagator, and the clauses the search learns from its lemmas go out
+  // and come back in through the exchange the hook connected. Eight Reals
+  // in {0, 1} cannot sum to 9/2, which takes the theory many conflicts.
+  if (!exchange_available)
+    GTEST_SKIP() << "the backend does not exchange clauses";
+  std::string script;
+  std::string sum;
+  for (int i = 0; i < 8; i++)
+  {
+    const std::string r = "r" + std::to_string(i);
+    script += "(declare-const " + r + " Real)(assert (or (= " + r +
+              " 0) (= " + r + " 1)))";
+    sum += " " + r;
+  }
+  script += "(assert (= (+" + sum + ") (/ 9 2)))";
+  TermManager tm;
+  Options o = batch_options();
+  o.set("lra-first-search", "true");
+  o.set("print-functionstat", "true");
+  Solver s(tm, o);
+  std::string diagnostics;
+  s.set_diagnostic_sink([&](std::string_view text) { diagnostics += text; });
+  s.parse_smt2(script);
+  Echo echo;
+  ClauseExchangeSettings settings;
+  settings.import_interval = 1;
+  s.set_before_search(
+      [&](SearchPoint& point)
+      { return point.connect_clause_exchange(&echo, settings); },
+      "the group", NoSearchPoint::search);
+  EXPECT_TRUE(s.check_sat().is_unsat());
+  EXPECT_EQ(s.statistics().str("before-search.outcome"), "offered");
+  EXPECT_GT(s.statistics().uint64("sat.exchange.exported"), 0u);
+  EXPECT_GT(s.statistics().uint64("sat.exchange.imported"), 0u);
+  if (backend_hosts_theory())
+  {
+    EXPECT_GE(first_search_connections(diagnostics), 1);
+  }
 }
 
 TEST(BeforeSearch, ArithmeticMixedWithArraysOrUfRefusesTheForkPoint)
@@ -363,8 +467,12 @@ TEST(BeforeSearch, ArithmeticRerouteKeepsDiversificationWithoutRepeatingTheHook)
 {
   if (!exchange_available)
     GTEST_SKIP() << "the backend has no search diversification";
-  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
-                    "query-files/lra-float-reroute-preserves-answer.smt2";
+  // The reroute follows a partial theory check, which needs the arithmetic
+  // propagator in the search.
+  if (!backend_hosts_theory())
+    GTEST_SKIP() << "the backend does not host the arithmetic propagator";
+  const auto path = std::filesystem::path(STP_TEST_QUERY_DIR) /
+                    "lra-float-reroute-preserves-answer.smt2";
   std::ifstream input(path);
   ASSERT_TRUE(input) << path;
   std::ostringstream script;
@@ -600,7 +708,7 @@ TEST(BeforeSearch, AnExchangeReplacedOrDisconnectedInTheHookCountsNothing)
   // A hook may connect one exchange and then another, or none: the one
   // connected when the search starts is the only one the backend uses.
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   TermManager tm;
   Solver s(tm, batch_options());
   s.parse_smt2(factoring(unsat_n));
@@ -630,7 +738,7 @@ TEST(BeforeSearch, ClausesThatCannotBeImportedAreDroppedAndTheAnswerStands)
   // exchange's variables are dropped and counted; next() appends to what it
   // is handed, so each clause starts from an empty vector.
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   struct Junk final : ClauseExchange
   {
     std::vector<std::vector<int>> clauses{
@@ -694,7 +802,7 @@ TEST(BeforeSearch, AScriptsChecksRefuseAPendingHookAndLeaveIt)
 TEST(BeforeSearch, ExchangeCountersDescribeTheLastCheck)
 {
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   TermManager tm;
   Solver s(tm, batch_options());
   s.parse_smt2(factoring(unsat_n));
@@ -714,7 +822,7 @@ TEST(BeforeSearch, ExchangeCountersDescribeTheLastCheck)
 TEST(BeforeSearch, AnImportPollAnnouncesTheBackendsCapWithoutABudget)
 {
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   TermManager tm;
   Solver s(tm, batch_options());
   s.parse_smt2(factoring(unsat_n));
@@ -881,7 +989,7 @@ std::vector<std::vector<int>> parse_clauses(const std::string& text)
 TEST(BeforeSearch, ClausesOneCopyLearnsImportIntoAnother)
 {
   if (!exchange_available)
-    GTEST_SKIP() << "no clause-import extension in this build's CaDiCaL";
+    GTEST_SKIP() << "the backend does not exchange clauses";
   // Both copies are forked at the same point, so they share the backend's
   // numbering: the first exports only, and is waited for; the second then
   // imports what the first learned, two clauses every eight conflicts, so

@@ -201,6 +201,7 @@ with tempfile.TemporaryDirectory(prefix='stpp-batch-') as temp:
         assert (p.returncode, p.stdout) == (code[expected], expected + '\n'), (path, p)
         s = json.loads(stats.read_text())
         assert s['base_config'] == 'eager-arrays' and s['forked'] == 3, s
+        assert s['sat_backend'] == (sanitizer.BACKEND or s['sat_backend']) != '', s
         assert s['fork_point_s'] >= 0 and s['fork_span_s'] >= 0, s
         clean()
         records.append({'base_config': path.name})
@@ -208,17 +209,18 @@ with tempfile.TemporaryDirectory(prefix='stpp-batch-') as temp:
                         str(paths[0][0])], capture_output=True, text=True, timeout=30)
     assert p.returncode == 2 and 'ordinary-route' in p.stderr, p
     clean()
-    # No fork point: ten symbolic array reads survive simplification, so the
-    # check may refine and the library offers no point. The owner's check
-    # searches in place -- one check, encoded once -- as -j1's does, with
-    # and without the hedge.
-    reads = ''.join(f'(declare-fun i{k} () (_ BitVec 32))' for k in range(10))
+    # No fork point: enough symbolic reads to exceed bounded late congruence
+    # expansion survive simplification, so the library offers no point. The
+    # owner's check searches in place -- one check, encoded once -- as -j1's
+    # does, with and without the hedge.
+    read_count = 181
+    reads = ''.join(f'(declare-fun i{k} () (_ BitVec 8))' for k in range(read_count))
     total = '#x00'
-    for k in range(10):
+    for k in range(read_count):
         total = f'(bvadd {total} (select a i{k}))'
     for value, expected in (('#x7f', 'sat'),):
         refusing = temp / 'reads.smt2'
-        refusing.write_text('(set-logic QF_ABV)(declare-fun a () (Array (_ BitVec 32) (_ BitVec 8)))'
+        refusing.write_text('(set-logic QF_ABV)(declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))'
                             + reads + f'(assert (= {total} {value}))(check-sat)')
         alone = subprocess.run([binary, '-j1', '--timeout', '30', str(refusing)],
                                capture_output=True, text=True, timeout=60)

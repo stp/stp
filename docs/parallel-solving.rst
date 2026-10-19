@@ -12,10 +12,10 @@ invocation. ``-j1`` is the sequential run: ordinary STP's pipeline through
 STP's API, on the build's default SAT backend, without models and under the
 per-process memory limit. Input is read as "Input and limits" describes. It
 is a Linux program, built with ``-DSTP_BUILD_PARALLEL=ON`` (:doc:`tools`),
-and it needs CaDiCaL with STP's clause-import extension, which the build
-applies when it fetches a 3.x CaDiCaL (the default); on a build with no
-CaDiCaL, or another one, ``-jN`` is refused, the default is 1, and ``-j1``
-still works.
+and it needs a SAT backend that exchanges learned clauses: CaDiCaL with
+STP's clause-import extension, or Kissat with STP's clause exchange, which
+the default pins of STP's forks carry. On a build with neither, ``-jN`` is
+refused, the default is 1, and ``-j1`` still works.
 
 .. code-block:: bash
 
@@ -95,13 +95,16 @@ With ``-jN`` and N greater than 1 the owner runs a group on N CPUs:
   no ``set-logic``, there is no hedge, and the roots take its CPU. An answer
   from the hedge while the owner is still encoding stops the encoding.
 - **The roots**, on the other N − 1 CPUs (N without a hedge). The owner
-  runs ordinary STP on the query, on CaDiCaL whatever the build's default
-  backend -- simplification, bit-blasting, CNF -- up to the moment the CNF
-  is loaded into CaDiCaL and its search would start
+  runs ordinary STP on the query, on the group's backend whatever the
+  build's default -- CaDiCaL where it exchanges clauses, else Kissat, or the
+  one ``--sat-backend`` names -- through simplification, bit-blasting and
+  CNF up to the moment the CNF is loaded into that backend and its search
+  would start
   (``Solver::set_before_search``). There it forks one root per CPU and
   abandons its own check; the roots are not pinned, and the kernel places
   them on the CPUs the process may use. Every root holds the same loaded
-  solver, copy-on-write. Root 0 searches as ordinary STP does on CaDiCaL;
+  solver, copy-on-write. Root 0 searches as ordinary STP does on that
+  backend;
   root *i* > 0 is diversified by a fixed table (seed N + *i*, N being
   ``--random-seed`` or 0; saved phases, a shuffled decision order,
   focused- or stable-only search). The roots publish learned clauses of at
@@ -144,9 +147,9 @@ A check that preprocessing decides answers at once, in the owner. A check
 that cannot offer the fork point, because it may refine after its first
 solve (array axioms STP leaves lazy, when reads survive simplification, or
 an uninterpreted function), searches in place in the owner, once, as
-ordinary STP on CaDiCaL: on ``QF_BV`` the hedge runs beside it; on the
-other logics there is no hedge, so the owner works alone on one of the N
-CPUs. The report records ``fork_point`` ``refused`` and the library's
+ordinary STP on the group's backend: on ``QF_BV`` the hedge runs beside it;
+on the other logics there is no hedge, so the owner works alone on one of
+the N CPUs. The report records ``fork_point`` ``refused`` and the library's
 reason. An array equality the pipeline expands eagerly (between stores over
 bit-vector arrays, say) does not refuse the point. When the rings cannot be
 mapped (a small ``--worker-memory-mib``) the roots run without sharing and
@@ -159,8 +162,8 @@ from the same loaded solver, and holds in every model of the query. It is
 implied by the clauses all of them share -- or, under ``--config
 eager-arrays``, where a root whose model fails its replay adds array axioms
 after the fork, by those axioms, which are valid for the query -- because
-every root runs the same CaDiCaL options (diversification changes only the
-search), no technique that removes models runs between the fork and the
+every root runs the same backend with the same options (diversification
+changes only the search), no technique that removes models runs between the fork and the
 connection, and the variables created later lie above the cutoff that no
 exported clause crosses. Every complete answer in hand is compared
 with the others -- each root's, the hedge's, the owner's, and one written by
@@ -248,7 +251,7 @@ Options
 
 ``-j N``, ``-jN``, ``--jobs=N``
   Without it, the CPUs the process is allowed, at most 8 (1 on a build
-  without the extension). 1 is ordinary STP's pipeline (above). N > 1 is the
+  with no backend that exchanges clauses). 1 is ordinary STP's pipeline (above). N > 1 is the
   group on N CPUs (N − 1 roots and the hedge on ``QF_BV``, N roots
   otherwise), holding N copies of the loaded solver. N may not exceed the
   CPUs the process is allowed. Numbers are read in base 10.
@@ -258,6 +261,12 @@ Options
 ``--random-seed N``
   The native seed of ordinary STP, of the hedge and of root 0; root *i* > 0
   takes N + *i*.
+``--sat-backend NAME``
+  The SAT backend of every process, one of the build's. Without it ``-j1``
+  runs the build's default, the hedge CaDiCaL where it is built, and the
+  roots the first backend that exchanges clauses, CaDiCaL before Kissat.
+  With ``-jN`` it must be one that does. The group's policy and every
+  measurement below were chosen and taken on CaDiCaL.
 ``--worker-memory-mib M``, ``--memory-mib M``
   The per-process address-space limit (default 16384, 0 inherits), which
   also bounds the input, and the invocation's PSS guard (default 0: none).
@@ -270,9 +279,9 @@ Options
   floating-point elements, or one with a constant array, still refines and
   does not.
 ``--stats-json FILE``
-  A JSON report: the answer, which side and which root decided, whether the
-  fork point was offered, timings, the memory peaks, and each root's
-  exchange counters.
+  A JSON report: the answer, which side and which root decided, the roots'
+  SAT backend, whether the fork point was offered, timings, the memory
+  peaks, and each root's exchange counters.
 ``--help``, ``--version``
   The usage, or the version and commit of the STP library it runs on.
 
@@ -309,14 +318,15 @@ limited. A refusal is exit status 2, never an answer.
 Results
 -------
 
-These are a development version's numbers, measured on one 24-vCPU VM, one
-invocation at a time; it pinned each root to a CPU and ran its hedge as a
-side of its own. An earlier carve of this tool was checked against it at
-``-j8`` on the reserved sample below: both decided the same 40 files with
-the same answers, the carve at 1.006 times the development version's PAR-2
-score and 0.96 times its geometric-mean time. The tool has changed since in
-how it reads its input and where it forks its hedge, and has not been
-measured on the sample again.
+The reserved sample and the competition track are a development version's
+numbers, measured on one 24-vCPU VM, one invocation at a time; it pinned
+each root to a CPU and ran its hedge as a side of its own. An earlier carve
+of this tool was checked against it at ``-j8`` on the reserved sample
+below: both decided the same 40 files with the same answers, the carve at
+1.006 times the development version's PAR-2 score and 0.96 times its
+geometric-mean time. The tool has changed since in how it reads its input
+and where it forks its hedge, and has not been measured on the sample
+again.
 
 **A reserved sample** of 51 QF_BV files from 14 families, drawn after every
 design choice above was fixed and never tuned on, split by whether ordinary
@@ -354,16 +364,15 @@ STP needs 10 s; a 120 s cap and 8 GiB per process:
 ``-j8`` is 2.4 times faster than ordinary STP on the hard files (2.5 times
 than ``-j1``), with ten material wins over ``-j1`` and no loss, and decides
 two files ordinary STP does not; on the easy files it is 1.5 times faster
-(1.6 than ``-j1``). ``-j24`` is not faster than ``-j8``: on the hard files
-it took 0.97 times ``-j8``'s time, within the spread of single runs (three
-runs of one of those files at ``-j24`` differed by up to 2.5 times), and on
-the files under 10 s it is slower than ``-j8`` (by 0.22 s at the median
-over all 26), because of the contention described under "What ``-jN``
-runs": each of k busy processes runs 1.12 times slower than alone at k = 8
-and 1.60 times at k = 24, so a search of 4–10 s pays 1–3 s before sharing
-can repay it. There was no disagreement,
-and 40 of the 41 decided files are confirmed by Bitwuzla or a checked
-witness.
+(1.6 than ``-j1``). On this sample ``-j24`` is not faster than ``-j8``: on
+the hard files it took 0.97 times ``-j8``'s time, within the spread of
+single runs (three runs of one of those files at ``-j24`` differed by up to
+2.5 times), and on the files under 10 s it is slower than ``-j8`` (by
+0.22 s at the median over all 26), because of the contention described
+under "What ``-jN`` runs": each of k busy processes runs 1.12 times slower
+than alone at k = 8 and 1.60 times at k = 24, so a search of 4–10 s pays
+1–3 s before sharing can repay it. There was no disagreement, and 40 of
+the 41 decided files are confirmed by Bitwuzla or a checked witness.
 
 **The QF_BV division of the SMT-COMP 2026 parallel track**, 52 files under
 the competition's 1 200 s limit, run with the development version at 16 GiB
@@ -407,6 +416,41 @@ the largest files (mcm ``184`` and ``186``) the 24 copies exceeded the
 128 GiB guard, and ``AND-NESTED-32-32`` aborts at 16 GiB per process even
 alone (an open decision below).
 
+**Beyond 24 CPUs**: ten hard files of the same division, chosen to include
+ones where earlier runs had gained, lost and decided nothing -- so, unlike
+the reserved sample, not unseen -- run with a later development build on
+12 and 13 October 2026, on a 64-core VM with two NUMA nodes and 251 GiB,
+``-jN`` allowed one hardware thread on each of N cores; seed 0, one run
+each, a 180 s cap and 16 GiB per process. The row without sharing is the
+test driver's ``--clause-sharing off``:
+
+.. list-table::
+   :header-rows: 1
+
+   * - mode
+     - decided at ``-j8`` (of 10)
+     - at ``-j24``
+     - at ``-j64``
+     - PAR-2 at ``-j8``, ``-j24``, ``-j64``
+   * - ``stp-p -jN``
+     - 2
+     - 5
+     - 7
+     - 3 198, 2 292, 1 733
+   * - without sharing
+     - 2
+     - 2
+     - 3
+     - 3 100, 3 082, 2 797
+
+A group wider than 8 can pay on a hard query, and sharing is what pays: each
+of the four unsatisfiable files decided was decided only with it, while
+without it the group decided satisfiable files alone, two of them at
+``-j8`` where the sharing group did not. The default stays at 8 for the
+short files above and for memory (open decisions below). Six of the seven
+decided files agree with the competition's published answers; the seventh,
+``Sage2/bench_6746``, was sat in every run that decided it, unconfirmed.
+
 **Real arithmetic, historical baseline.** Sequential STP decided 18 of the
 40 QF_LRA files of the same track when this was measured (6 October 2026,
 before parallel arithmetic support and later changes to STP's arithmetic
@@ -415,6 +459,60 @@ results file
 OpenSMT-SMTS-base decides 18 at one CPU second per wall-clock second, and
 OpenSMT-SMTS decides 22 at a median of 126. These are historical sequential
 results, not measurements of the current arithmetic group.
+
+**Real arithmetic, clause-sharing group.** All 1,753 non-incremental
+QF_LRA benchmarks in a corpus spanning 17 families were run at ``-j1`` and
+``-j12`` on 12 and 13 October 2026, using
+`commit 87c582d18
+<https://github.com/stp/stp/commit/87c582d1818be1befe2974931c21853ca2a1cf16>`_.
+Both modes used the same frozen release executable and library, built with
+Clang 21, mimalloc and CaDiCaL 3.0.1, on a shared 24-vCPU VMware host.
+They were confined to the same 12 CPUs, one invocation at a time with
+alternating job order. The whole-invocation wall deadline was 60 s,
+with 16 GiB of address space per process and a 64 GiB aggregate PSS guard.
+There was one full-corpus run per mode. PAR-2 below is the mean seconds per
+benchmark: a complete answer within the deadline costs its end-to-end wall
+time; an undecided or failed invocation costs 120 s.
+
+.. list-table::
+   :header-rows: 1
+
+   * - mode
+     - decided (of 1,753)
+     - timeouts
+     - PAR-2 mean (s)
+   * - ``stp-p -j1``
+     - 1,639
+     - 114
+     - 10.679
+   * - ``stp-p -j12``
+     - 1,686
+     - 67
+     - 6.676
+
+``-j12`` reduced PAR-2 by 37.5%, decided 47 additional inputs and lost
+none. The additional decisions came from LassoRanker (29), invariant
+synthesis (7), miplib (6), 2019-ezsmt (4) and tropical-matrix (1). On the
+1,639 inputs both modes decided, total runtime was 0.493 times ``-j1``'s
+and geometric-mean runtime 0.965 times: gains were concentrated in
+expensive inputs, while very easy families were often slower in parallel.
+All 67 remaining undecided ``-j12`` inputs were wall timeouts, including
+30 in LassoRanker, 14 in miplib and 8 in tropical-matrix.
+
+**Selected follow-ups** used the same build and limits. Repeating 32
+baseline gain/regression cases twice per mode gave 32 of 64 decisions at
+``-j1`` and 63 of 64 at ``-j12``. On 48 selected hard inputs, the test
+driver at ``-j12`` with sharing decided 34 and had mean PAR-2 46.113 s;
+with ``--clause-sharing off`` it decided 30 and had mean PAR-2 59.661 s,
+29.4% higher. Sharing on/off order alternated between blocks of eight
+inputs. These subsets were selected after the baseline and are exploratory,
+not further full-corpus estimates. Across the 3,730 baseline and follow-up
+trials, the audit found no solver errors, benchmark-status mismatches or
+contradictory complete answers.
+
+These results support the existing arithmetic group and its clause sharing.
+They do not compare ``-j8`` with ``-j12`` or measure QF_LRA at ``-j24``;
+the eight-CPU default remains unchanged.
 
 The interface it is built on
 ----------------------------
@@ -429,7 +527,9 @@ possible and can be used without ``stp-p``:
   place, as the caller asks;
 - the hook's ``SearchPoint`` connects a ``ClauseExchange`` (learned clauses
   out, clauses to import in, in the backend's own numbering) to that
-  check's backend, or diversifies its search and nothing else.
+  check's backend, or diversifies its search and nothing else. CaDiCaL with
+  STP's clause-import extension and Kissat with STP's clause exchange
+  implement both.
 
 Open decisions
 --------------
@@ -441,8 +541,11 @@ Each of these is open, with the measurement that would settle it:
   including short inputs, comparing latency and CPU cost.
 - **Memory-aware allocation**: fewer roots, or roots shed at runtime, when
   the loaded solver is large; two of the competition's largest files
-  exceeded a 128 GiB guard at 24 CPUs. Measured by sampling each root's PSS
-  against the owner's size after encoding.
+  exceeded a 128 GiB guard at 24 CPUs. At 64 they passed a 192 GiB guard
+  within 36 s, and on one (mcm ``186``) memory grew too fast for the guard,
+  which samples: the kernel killed a process at a 224 GiB cgroup limit
+  first. Measured by sampling each root's PSS against the owner's size
+  after encoding.
 - **Aborts at the address-space limit**: a process that exhausts
   ``--worker-memory-mib`` aborts or crashes rather than failing cleanly;
   when every process dies that way the answer is an error (exit 2), not
@@ -462,16 +565,24 @@ Each of these is open, with the measurement that would settle it:
   the group would re-fork each round.
 - **An automatic** ``ackermanize`` **rule**, chosen from the input's array
   reads (a sequential question).
-- **Real arithmetic**: ``QF_LRA`` uses the clause-sharing group. Parallel
-  simplex, arithmetic subproblem partitioning and HiGHS work sharing remain
-  separate possible approaches to measure.
+- **Real arithmetic**: the comparison above supports the clause-sharing
+  group. Profiling the 67 remaining ``-j12`` timeouts should distinguish
+  Boolean-search cost from arithmetic-check cost; very easy files still
+  incur parallel overhead. Parallel simplex, arithmetic subproblem
+  partitioning and HiGHS work sharing remain separate possible approaches
+  to measure.
 - **The 17 track files nobody decides**, by family.
 - **An in-library API**: the group's coordinator in ``libstp`` with a
   parallel options block on ``check_sat``, the C and Python mirrors of the
   two members above, and every ``stp-p`` option settable through it.
-- **Builds without the extension**: ``-jN`` is refused where CaDiCaL is
-  missing or unpatched; an independent-seed portfolio could run there
-  instead.
-- **Beyond 24 CPUs**: what ``-j48`` gains, NUMA-aware forking, and handing
-  the CNF to a distributed solver as the comparison to make before building
-  more.
+- **Builds without the extension**: ``-jN`` is refused where neither
+  CaDiCaL nor Kissat carries STP's extension; an independent-seed portfolio
+  could run there instead.
+- **Kissat groups**: a group on Kissat runs the policy chosen on CaDiCaL and
+  has not been measured.
+- **Mixed groups**: roots on different backends would need the CNF loaded
+  into both before the fork and clauses exchanged in STP's numbering rather
+  than each backend's.
+- **Beyond 24 CPUs**: ``-j64`` gains on hard files (above); what it costs
+  on the rest, NUMA-aware forking, and handing the CNF to a distributed
+  solver as the comparison to make before building more.

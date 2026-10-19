@@ -200,7 +200,7 @@ std::string quoted_list(const std::vector<std::string>& values)
 bool backend_available(const std::string& value)
 {
   if (value == "cadical" || value == "cryptominisat" || value == "minisat" ||
-      value == "simplifying-minisat")
+      value == "kissat" || value == "simplifying-minisat")
     return stp::has_sat_backend(value);
   return true;
 }

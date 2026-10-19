@@ -67,6 +67,9 @@ std::vector<std::string> sat_backends()
   out.emplace_back("minisat");
   out.emplace_back("simplifying-minisat");
 #endif
+#if STP_BUILD_WITH_KISSAT
+  out.emplace_back("kissat");
+#endif
   return out;
 }
 
@@ -107,12 +110,18 @@ std::map<std::string, std::string> capabilities()
   c["highs"] = "false";
 #endif
   // Learned-clause exchange between forked copies of one solver
-  // (ClauseExchange): CaDiCaL with STP's clause-import extension.
+  // (ClauseExchange): CaDiCaL with STP's clause-import extension, Kissat with
+  // STP's clause exchange. Whether any backend can, and which, in the
+  // build's order.
+  std::string exchanging;
 #ifdef STP_CADICAL_HAS_CLAUSE_IMPORT
-  c["sat.clause-exchange"] = "true";
-#else
-  c["sat.clause-exchange"] = "false";
+  exchanging += "cadical";
 #endif
+#ifdef STP_KISSAT_HAS_CLAUSE_EXCHANGE
+  exchanging += std::string(exchanging.empty() ? "" : ",") + "kissat";
+#endif
+  c["sat.clause-exchange"] = exchanging.empty() ? "false" : "true";
+  c["sat.clause-exchange.backends"] = exchanging;
   c["fp.rem.limit"] = "2^eb+sb-4<=2304";
   c["kind.FP_TO_REAL"] = "true";
   c["kind.FP_TO_FP_FROM_REAL"] = "values-only";
@@ -121,6 +130,9 @@ std::map<std::string, std::string> capabilities()
   c["smtlib.named-unsat-cores"] = "true";
   c["solvers-per-manager"] = "unbounded";
   c["interrupt.cryptominisat"] = "between-solver-calls";
+#ifdef USE_KISSAT
+  c["interrupt.kissat"] = "during-search";
+#endif
 #ifdef USE_MINISAT
 #ifdef STP_MINISAT_HAS_TERMINATOR
   c["interrupt.minisat"] = "during-search";

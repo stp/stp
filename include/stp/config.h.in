@@ -55,7 +55,9 @@ OUT OF OR IN CONNECT
 /* Public C++ headers construct the same default SAT-backend selection as the
  * library, including when compiled by an installed-package client.  These are
  * build capabilities, not runtime backend selectors. */
+#cmakedefine01 STP_BUILD_WITH_KISSAT
 #cmakedefine01 STP_BUILD_WITH_CADICAL
+#cmakedefine01 STP_BUILD_WITH_SATSUMA
 #cmakedefine01 STP_BUILD_WITH_CRYPTOMINISAT
 #cmakedefine01 STP_BUILD_WITH_MINISAT
 

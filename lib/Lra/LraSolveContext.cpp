@@ -1133,9 +1133,13 @@ void LraSolveContext::invalidate(std::string detail) noexcept
   // torn down (ExactLraCore::exhausted), and refuses everything after; the
   // refusal that brings the context here is the budget's, and the solve
   // gives up rather than reporting a fault -- unless the context had already
-  // failed for a reason of its own.
-  const bool budget = status_ == SolveContextStatus::Ready && core_ != nullptr &&
-                      core_->exhausted();
+  // failed for a reason of its own. So does a core whose check the budget
+  // stopped between changes: it stays in that state, refusing new levels
+  // and bounds, and a search that keeps assigning after a partial check
+  // stopped this way runs into the refusal at its next level.
+  const bool budget =
+      status_ == SolveContextStatus::Ready && core_ != nullptr &&
+      (core_->exhausted() || core_->status() == CheckStatus::ResourceLimit);
   status_ = budget ? SolveContextStatus::ResourceLimit : SolveContextStatus::Invalid;
   failure_detail_ = std::move(detail);
   if (budget)

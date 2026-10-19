@@ -111,14 +111,14 @@ name = "sat-backend"
 id = 1
 type = "enum"
 default = "auto"
-values = ["auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat"]
+values = ["auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat", "kissat"]
 tier = "stable"
 settable = "construction"
 scope = "solver"
 engine = { custom = "sat_backend" }
 category = "sat"
-requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat" }
-cli_help = "the SAT backend: auto picks the first this build has of CryptoMiniSat, CaDiCaL and MiniSat; a backend it lacks is refused"
+requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat, kissat" }
+cli_help = "the SAT backend: auto picks the first this build has of CryptoMiniSat, CaDiCaL, MiniSat and Kissat; a backend it lacks is refused"
 help = "the SAT backend; one this build lacks is a recoverable OPTION_UNAVAILABLE when a solver is made with it, never exit(-1) at solve time"
 
 [[option]]
@@ -320,6 +320,12 @@ group = "Miscellaneous options"
 # flags of one entry exclude each other on the command line)
 
 [[alias]]
+name = "kissat"
+of = "sat-backend"
+value = "kissat"
+help = "use incremental kissat as the solver"
+
+[[alias]]
 name = "cadical"
 of = "sat-backend"
 value = "cadical"
@@ -444,8 +450,8 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "disable_simplifications" }
 category = "simplification"
-implies = { "switch-word" = true, "disable-opt-inc" = true, "disable-cbitp" = true, "disable-equality" = true, "unconstrained-variable-elimination" = false, "flattening" = false, "rewriting" = false, "split-extracts" = false, "ite-context-simplifications" = false, "use-intervals" = false, "pure-literals" = false, "common-subsum" = false, "common-factor" = false, "pair-extract" = false, "merge-same" = false, "distinct-ordering" = false, "linear-form" = false }
-excludes = ["switch-word", "disable-opt-inc", "disable-cbitp", "disable-equality", "unconstrained-variable-elimination", "flattening", "rewriting", "split-extracts", "ite-context-simplifications", "use-intervals", "pure-literals", "common-subsum", "common-factor", "pair-extract", "merge-same", "distinct-ordering", "linear-form"]
+implies = { "switch-word" = true, "disable-opt-inc" = true, "disable-cbitp" = true, "disable-equality" = true, "unconstrained-variable-elimination" = false, "flattening" = false, "rewriting" = false, "split-extracts" = false, "ite-context-simplifications" = false, "use-intervals" = false, "pure-literals" = false, "common-subsum" = false, "common-factor" = false, "pair-extract" = false, "merge-same" = false, "distinct-ordering" = false, "linear-form" = false, "bv-adjacent-bounds" = false, "bv-conditional-equality" = false, "bv-double-equality" = false }
+excludes = ["switch-word", "disable-opt-inc", "disable-cbitp", "disable-equality", "unconstrained-variable-elimination", "flattening", "rewriting", "split-extracts", "ite-context-simplifications", "use-intervals", "pure-literals", "common-subsum", "common-factor", "pair-extract", "merge-same", "distinct-ordering", "linear-form", "bv-adjacent-bounds", "bv-conditional-equality", "bv-double-equality"]
 help = "disable all simplifications"
 
 [[option]]
@@ -700,6 +706,42 @@ category = "simplification"
 help = "Rewrite every bit-vector term into a canonical linear combination of its non-linear sub-terms, so that two equal combinations spelled differently become one node and share the circuit built on them rather than each blasting their own"
 
 [[option]]
+name = "bv-adjacent-bounds"
+type = "bool"
+cli_form = "flag"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "enable_adjacent_bounds" }
+category = "simplification"
+help = "Rewrite unsigned successor and predecessor comparisons into guarded bounds; the encoding changes can help or hurt SAT search"
+
+[[option]]
+name = "bv-conditional-equality"
+type = "bool"
+cli_form = "flag"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "enable_conditional_equality" }
+category = "simplification"
+help = "Lift conditional equalities sharing a bit-vector symbol into one word-level definition"
+
+[[option]]
+name = "bv-double-equality"
+type = "bool"
+cli_form = "flag"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "enable_double_equality" }
+category = "simplification"
+help = "Cancel a shared addend in modular equalities of the form x + y = 2*x"
+
+[[option]]
 name = "linear-form-addend-limit"
 type = "int"
 default = 64
@@ -780,6 +822,121 @@ category = "simplification"
 help = "replace a (distinct ...) over variables that occur nowhere else with a strict chain, which fixes one of the n! equivalent orderings the bit-blaster would otherwise search. Incremental solves keep the rewrite behind a retractable root assumption"
 
 [[option]]
+name = "satsuma"
+type = "enum"
+default = "off"
+values = ["off", "lex", "fix", "simplify"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "satsuma" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "experimental: preprocess a complete, non-incremental CNF with Satsuma before the SAT backend: off (default), lex, fix, or simplify (unit propagation and clause preprocessing without symmetry discovery). Refinement and incremental encodings are left to the backend"
+
+[[option]]
+name = "satsuma-profile"
+type = "enum"
+default = "stp"
+values = ["stp", "competition", "quick"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "satsuma_profile" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "Satsuma preprocessing limits: stp retains the existing bounded policy; competition uses the Satsuma-iter limits; quick limits the input to one million variables plus literal occurrences, Schreier cost to twenty million, and fix mode to one pass"
+
+[[option]]
+name = "satsuma-ordering"
+type = "enum"
+default = "auto"
+values = ["auto", "off", "weight", "clique"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "satsuma_ordering" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "Satsuma column ordering: auto disables ordering with the stp profile and selects Cliquer with competition fix; off, weight and clique explicitly choose a heuristic"
+
+[[option]]
+name = "satsuma-component-limit"
+type = "int"
+default = -1
+range = { min = -1, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "satsuma_component_limit" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "override Satsuma's graph component size limit; -1 follows the profile and 0 removes the component limit"
+
+[[option]]
+name = "satsuma-input-limit"
+type = "int"
+default = -1
+range = { min = -1, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "satsuma_input_limit" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "skip Satsuma before copying the CNF when variables plus literal occurrences exceed this limit; -1 leaves this additional guard disabled"
+
+[[option]]
+name = "satsuma-iteration-limit"
+type = "int"
+default = -1
+range = { min = -1, max = 128 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "satsuma_iteration_limit" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "limit additional Satsuma fix rounds after the first pass; -1 keeps the library policy and 0 requests a single pass"
+
+[[option]]
+name = "kissat-adaptive-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_adaptive_cnf" }
+category = "cnf"
+requires = { build = "kissat" }
+help = "enable the estimate-based gia-low/new-medium selector for Kissat when cnf-generation-effort is auto; the ordinary refinement gates and explicit CNF choices remain authoritative"
+
+[[option]]
+name = "kissat-import-order"
+type = "int"
+default = 0
+range = { min = 0, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_import_order" }
+category = "sat"
+requires = { build = "kissat" }
+help = "experimental initial variable import order: 0 follows clauses, 1 imports allocated IDs numerically, 2 imports the maximum allocated ID before clauses; future incremental variables retain clause order"
+
+[[option]]
+name = "kissat-batch-only"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_batch_only" }
+category = "sat"
+requires = { build = "kissat" }
+help = "use non-incremental Kissat on a fresh complete batch encoding; incremental sessions and refinement queries retain incremental solving"
+
+[[option]]
 name = "cadical-elim"
 type = "int"
 default = -1
@@ -826,6 +983,7 @@ help = "CaDiCaL maximum elimination effort; overrides CADICAL_ELIMMAXEFF. The ba
 
 [[option]]
 name = "cadical-factor"
+aliases = ["kissat-factor"]
 type = "mode"
 default = "on"
 values = ["on", "off", "auto"]
@@ -835,8 +993,161 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "cadical_factor" }
 category = "sat"
-requires = { build = "cadical" }
-help = "let cadical use bounded variable addition: 'on' (the default), 'off', or 'auto' (on only for problems with array operations, which was the default until it was measured on bitvector-only problems). Needs a CaDiCaL 3.x build; otherwise an explicit request is declined with a warning"
+requires = { build = "bva" }
+help = "let the SAT backend use bounded variable addition: 'on' (the default), 'off', or 'auto' (on only for problems with array operations). Requires CaDiCaL 3.x or incremental Kissat; --kissat-factor is an alias. Other backends decline an explicit request with a warning"
+
+[[option]]
+name = "kissat-trail-reuse"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_trail_reuse" }
+category = "sat"
+requires = { build = "kissat" }
+help = "allow Kissat to retain the shared assumption prefix across checks and unaffected search decisions across refinement rounds"
+
+[[option]]
+name = "kissat-trail-reuse-mode"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_trail_reuse_mode" }
+category = "sat"
+requires = { build = "kissat" }
+help = "Kissat incremental trail reuse: -1 follows STP's scope hints, 0 disables reuse, 1 keeps the common assumption prefix, 2 retains the whole trail when assumptions are unchanged and otherwise keeps their common prefix; --kissat-trail-reuse=false disables every mode"
+
+[[option]]
+name = "kissat-probe"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_probe" }
+category = "sat"
+requires = { build = "kissat" }
+help = "allow Kissat's probing preprocessing and probe-based inprocessing; disabling it keeps the ordinary CDCL search and variable elimination available"
+
+[[option]]
+name = "kissat-lucky-probe"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_lucky_probe" }
+category = "sat"
+requires = { build = "kissat" }
+help = "try a disposable greedy SAT candidate after large incremental CNF growth; retain the persistent solver for fallback. Uses a 250 ms soft time allowance per attempt; skipped with an explicit conflict budget"
+
+[[option]]
+name = "kissat-incremental-greedy"
+type = "int"
+default = 0
+range = { min = 0, max = 4 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_incremental_greedy" }
+category = "sat"
+requires = { build = "kissat" }
+help = "bounded greedy completion inside incremental Kissat: 0 disables, 1 tries false-first, 2 tries four orders above the assumptions, 3 only restarts at the assumptions (diagnostic), 4 tries four orders above the current trail; an unset value may follow the automatic SAT profile"
+
+[[option]]
+name = "kissat-greedy-conflicts"
+type = "int"
+default = 100
+range = { min = 0, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_conflicts" }
+category = "sat"
+requires = { build = "kissat" }
+help = "new conflicts in a solve before an optional incremental greedy attempt; either this or the decision threshold can trigger it, and 0 permits an immediate attempt"
+
+[[option]]
+name = "kissat-greedy-decisions"
+type = "int"
+default = 10000
+range = { min = 0, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_decisions" }
+category = "sat"
+requires = { build = "kissat" }
+help = "new decisions in a solve before an optional incremental greedy attempt; either this or the conflict threshold can trigger it, and 0 permits an immediate attempt"
+
+[[option]]
+name = "kissat-greedy-growth"
+type = "int"
+default = 4
+range = { min = 1, max = 16 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_growth" }
+category = "sat"
+requires = { build = "kissat" }
+help = "minimum original clause count multiplier after an inconclusive incremental greedy attempt; every retry also needs 100,000 new original clauses, so 1 retains only that absolute growth requirement"
+
+[[option]]
+name = "kissat-greedy-phase-cache"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_phase_cache" }
+category = "sat"
+requires = { build = "kissat" }
+help = "save the phases of a successful incremental greedy completion for later search"
+
+[[option]]
+name = "kissat-eliminate"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+sentinel = "-1 = unset: Kissat's own default applies"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_eliminate" }
+category = "sat"
+requires = { build = "kissat" }
+help = "Kissat variable elimination: -1 preserves the backend policy, 0 disables and 1 enables; independent of kissat-probe"
+
+[[option]]
+name = "kissat-stable"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_stable" }
+category = "sat"
+requires = { build = "kissat" }
+help = "Kissat search mode: -1 follows --search-bias, 0 focused only, 1 switches focused and stable, 2 stable only; an explicit mode overrides the search bias hint"
+
+[[option]]
+name = "kissat-one-shot-stable"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_one_shot_stable" }
+category = "sat"
+requires = { build = "kissat" }
+help = "experimental search mode for a fresh complete Kissat batch encoding: -1 inherits the ordinary mode, 0 focused only, 1 switches focused and stable, 2 stable only; requires kissat-batch-only and overrides kissat-stable only when one-shot solving is eligible"
 
 [[option]]
 name = "incremental-inprobing"
@@ -859,8 +1170,8 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "refinement_trail_reuse" }
 category = "sat"
-requires = { build = "cadical" }
-help = "keep cadical's search trail between the solve calls of a refinement loop (array reads, bit-vector abstractions, uninterpreted functions) instead of restarting each round from the root"
+requires = { build = "bva" }
+help = "keep the CaDiCaL or Kissat search trail between the solve calls of a refinement loop (array reads, bit-vector abstractions, uninterpreted functions)"
 
 [[option]]
 name = "threads"
@@ -887,7 +1198,68 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "search_bias" }
 category = "sat"
-help = "tune the SAT search towards one answer: 'unsat' (best for unsatisfiable / verification workloads), 'sat', or 'none' (the default, leaving the solver at its own settings). Solvers with no such setting ignore it"
+help = "tune the SAT search towards one answer: 'unsat' (for unsatisfiable / verification workloads), 'sat', or 'none' (the baseline default). An unset value may follow the automatic SAT profile; explicitly naming a value owns the search configuration, with explicit phase/mode overrides taking precedence. Solvers with no such setting ignore it"
+
+[[option]]
+name = "sat-tuning"
+id = 22
+type = "enum"
+default = "auto"
+values = ["auto", "off"]
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "sat_tuning" }
+category = "sat"
+help = "choose measured SAT/CNF defaults using the selected backend, declared logic and incremental session mode: auto applies supported profiles to unset options, off retains the baseline defaults. Explicit option values always win, including explicit values equal to the baseline. Use -s to report the selected profile"
+
+[[option]]
+name = "sat-phase"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.phase" }
+category = "sat"
+help = "CaDiCaL/Kissat initial decision polarity: -1 preserves the backend policy, 0 prefers false, 1 prefers true; explicit choices override search-bias"
+
+[[option]]
+name = "sat-forcephase"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.forcephase" }
+category = "sat"
+help = "CaDiCaL/Kissat forced initial polarity: -1 preserves the backend policy, 0 permits saved/target phases, 1 always chooses the initial phase"
+
+[[option]]
+name = "sat-rephase"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.rephase" }
+category = "sat"
+help = "CaDiCaL/Kissat phase resetting: -1 preserves the backend policy, 0 disables, 1 enables; 2 resets only in stable search and requires CaDiCaL"
+
+[[option]]
+name = "sat-target"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.target" }
+category = "sat"
+help = "CaDiCaL/Kissat target phases: -1 preserves the backend policy, 0 disables, 1 uses them in stable search, 2 also uses them in focused search"
 
 [[option]]
 name = "ackermanize"
@@ -1744,7 +2116,7 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "array_index_hints" }
 category = "arrays"
-help = "seed the free indices of each array's reads apart before the first solve, so that fewer candidates collide two reads on one index: 'off' (the default), 'phase' (suggest a counting value per index), or 'decide' (also decide those bits first, through cadical's external propagator; other backends get the phases)"
+help = "seed the free indices of each array's reads apart before the first solve, so that fewer candidates collide two reads on one index: 'off' (the default), 'phase' (suggest a counting value per index), or 'decide' (also decide those bits first, through the external propagator of cadical, or of kissat built with stp's fork; other backends get the phases)"
 
 [[option]]
 name = "congruence-candidates"
@@ -2091,6 +2463,42 @@ scope = "solver"
 engine = { field = "uf_congruence_closure_min_apps" }
 category = "refinement.uf"
 help = "in auto mode, the least applications a UF function must have before its congruence is escalated to the closure; the files the closure helps carry a function of many hundreds of applications, so this keeps auto off the medium functions where escalating only adds overhead"
+
+[[option]]
+name = "array-late-read-limit"
+type = "int"
+default = 0
+range = { min = 0, max = 1000000 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_read_limit" }
+category = "arrays"
+help = "strict read-count bound for an optional eager array choice after batch preprocessing; 0 disables the late choice. This bound, array-late-expansion-limit and array-late-congruence-limit must admit the query; explicit --ackermanize keeps its existing meaning"
+
+[[option]]
+name = "array-late-expansion-limit"
+type = "uint"
+default = 200
+range = { max = 4294967295 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_expansion_limit" }
+category = "arrays"
+help = "strict structural cost bound for the optional late eager array choice; each read charges reachable writes and array ITEs. Used only when array-late-read-limit is positive; 0 disables the late choice"
+
+[[option]]
+name = "array-late-congruence-limit"
+type = "uint"
+default = 4000
+range = { max = 4294967295 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_congruence_limit" }
+category = "arrays"
+help = "maximum estimated index comparisons for the optional late eager array choice; distinct symbolic indexes are paired per base array, and constant-against-constant comparisons cost nothing"
 
 [[option]]
 name = "array-ackermann-budget"
@@ -3087,6 +3495,29 @@ engine = { custom = "cnf_generation_effort" }
 category = "cnf"
 cli_bad_value = "Unknown --cnf-generation-effort value '{value}'. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high, gia-low, gia-high, gia-very-high."
 help = "effort spent minimising the CNF: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high. Higher is slower to generate but yields a smaller CNF; auto picks gia-low or, for large estimated blasts, new-medium, since minimising a large one costs more than the solver saves - falling back to the very-low/medium choice under array refinement, on solvers other than cadical, or with no estimate recorded. The new-* rungs blast through STP's own AIG instead of ABC's and write the CNF directly: new-very-low is plain Tseitin, new-low recovers XOR and if-then-else, new-medium also collapses n-ary ANDs and ORs. The gia-* rungs are low, high and very-high again, reaching the same generator over a Gia the blaster built rather than one converted from an ABC AIG"
+
+[[option]]
+name = "array-equality-gia-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_equality_gia_cnf" }
+category = "cnf"
+help = "choose gia-low CNF for a batch query whose whole-array equality still needs refinement and meets array-equality-gia-min-reads, when cnf-generation-effort is auto; eagerly discharged equalities and explicit CNF efforts keep their ordinary choice"
+
+[[option]]
+name = "array-equality-gia-min-reads"
+type = "int"
+default = 16
+range = { min = 0, max = 1000000 }
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_equality_gia_min_reads" }
+category = "cnf"
+help = "minimum distinct reads after batch preprocessing and equality preparation for array-equality-gia-cnf; 0 removes the read-count guard"
 
 [[option]]
 name = "cnf-link-shared-cells"

@@ -25,6 +25,13 @@ sudo cmake --install build
 
 [CaDiCaL](https://github.com/arminbiere/cadical) is compiled in alongside it, and is what a build without CryptoMiniSat solves with. `--cryptominisat`, `--cadical` or `--minisat` selects a compiled-in backend for one run.
 
+Incremental [Kissat](https://github.com/stp/kissat/tree/stp) is an optional
+backend. Configure STP with `--kissat --auto-download` to build the pinned
+fork, then select it with `stp --kissat input.smt2`. A prebuilt checkout can
+be selected with `--kissat-dir=/path/to/kissat`.
+The [Kissat integration guide](docs/kissat.rst) describes the build options
+and incremental API.
+
 With `--cadical`, `--cadical-elim=0|1` controls variable elimination, and
 `--cadical-elimmineff=N` / `--cadical-elimmaxeff=N` set its minimum and maximum
 effort. For example:

@@ -72,6 +72,9 @@ function(AddSTPGTest sourcefile)
     # contributes nothing to a test that does not reference it, and a list kept
     # by hand would rot the first time a test grew the include.
     set(test_backends "")
+    if(USE_KISSAT)
+        list(APPEND test_backends Kissat)
+    endif()
     if(USE_CADICAL)
         list(APPEND test_backends CaDiCaL)
     endif()

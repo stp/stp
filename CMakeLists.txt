@@ -1116,6 +1116,15 @@ endif()
 # surface as a link failure with nothing pointing back here.
 include(deps-helper)
 
+# Optional CNF symmetry preprocessing. Satsuma is installed by a pinned
+# ExternalProject when no compatible installed header API is available.
+option(USE_SATSUMA "Build optional Satsuma CNF symmetry preprocessing" OFF)
+set(STP_BUILD_WITH_SATSUMA ${USE_SATSUMA})
+if(USE_SATSUMA)
+    find_package(Satsuma REQUIRED)
+endif()
+add_feature_info(Satsuma USE_SATSUMA "Enables optional Satsuma CNF preprocessing")
+
 # -----------------------------------------------------------------------------
 # MiniSat
 # -----------------------------------------------------------------------------
@@ -1155,12 +1164,33 @@ if (USE_CADICAL)
         add_definitions(-DSTP_CADICAL_HAS_DECISION_POLARITY)
     endif()
 endif()
-# stp-p's group needs CaDiCaL with STP's clause-import extension; without it
-# the tool still builds, and refuses -j greater than 1.
-if(STP_BUILD_PARALLEL AND NOT CADICAL_HAS_CLAUSE_IMPORT)
-    message(WARNING "STP_BUILD_PARALLEL is ON, but this build's CaDiCaL has no "
-                    "clause-import extension (none, a 2.x, or one found without "
-                    "STP's patch): stp-p will refuse -j greater than 1")
+# Incremental Kissat is opt-in. FindKissat can build STP's fork when missing.
+option(USE_KISSAT "Use the incremental Kissat solver backend" OFF)
+add_feature_info(Kissat USE_KISSAT "Enables incremental Kissat")
+if(USE_KISSAT)
+    find_package(Kissat REQUIRED)
+    add_definitions(-DUSE_KISSAT)
+    set(STP_BUILD_WITH_KISSAT ON)
+    if (KISSAT_HAS_CLAUSE_EXCHANGE)
+        add_definitions(-DSTP_KISSAT_HAS_CLAUSE_EXCHANGE)
+    endif()
+    if (KISSAT_HAS_EXTERNAL_PROPAGATOR)
+        add_definitions(-DSTP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+    endif()
+    if (KISSAT_HAS_ROOT_SIMPLIFY)
+        add_definitions(-DSTP_KISSAT_HAS_ROOT_SIMPLIFY)
+    endif()
+endif()
+
+# stp-p's group needs a backend that exchanges clauses: CaDiCaL with STP's
+# clause-import extension, or Kissat with STP's clause exchange. Without
+# either the tool still builds, and refuses -j greater than 1.
+if(STP_BUILD_PARALLEL AND NOT CADICAL_HAS_CLAUSE_IMPORT
+   AND NOT (USE_KISSAT AND KISSAT_HAS_CLAUSE_EXCHANGE))
+    message(WARNING "STP_BUILD_PARALLEL is ON, but no SAT backend of this build "
+                    "exchanges clauses (a CaDiCaL without STP's clause-import "
+                    "extension, and no Kissat with STP's clause exchange): "
+                    "stp-p will refuse -j greater than 1")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1495,19 +1525,20 @@ unset(_cms_brings_cadical)
 # Every backend is optional, but a solver with no SAT backend at all cannot
 # solve anything, so insist that at least one made it in.
 #
-# This is the point at which all three are settled: USE_MINISAT and USE_CADICAL
+# This is the point at which all backends are settled: USE_MINISAT, USE_KISSAT and USE_CADICAL
 # are plain options decided above, and USE_CRYPTOMINISAT has just been resolved
 # from its three-valued form to a definite ON or OFF. Asking here, rather than
 # after MiniSat has been searched for, means the answer arrives before any of
 # the per-backend lookups spend time or produce their own errors.
 # -----------------------------------------------------------------------------
-if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL)
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_KISSAT)
     message(FATAL_ERROR
             "No SAT backend is enabled, so this build could not solve "
             "anything. Enable at least one of:\n"
             "    -DUSE_CADICAL=ON     (on by default; -DENABLE_AUTO_DOWNLOAD=ON builds one)\n"
             "    -DUSE_CRYPTOMINISAT=ON  (5.11 or newer, and must already be installed)\n"
-            "    -DUSE_MINISAT=ON")
+            "    -DUSE_MINISAT=ON\n"
+            "    -DUSE_KISSAT=ON      (-DENABLE_AUTO_DOWNLOAD=ON builds STP's fork)")
 endif()
 
 # ----------

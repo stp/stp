@@ -196,6 +196,10 @@ inline SATSolver* makeBackend(UserDefinedFlags& uf, bool warn)
   // solver and every relief rebuild. Warn once for the session, not once per
   // rebuild.
   applySearchBias(*s, uf, warn);
+  if (uf.kissat_lucky_probe && !s->enableLuckyProbe() && warn)
+    std::cerr << "Warning: the selected SAT backend cannot enable "
+                 "--kissat-lucky-probe; using ordinary solving."
+              << std::endl;
   return s;
 }
 

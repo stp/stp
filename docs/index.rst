@@ -78,6 +78,7 @@ you have built but not installed, static builds, and Windows.
 
    building
    architecture
+   satsuma
 
 
 Command-line usage
@@ -125,6 +126,8 @@ page <https://smt-lib.org/>`__.
    array-extensionality
    uninterpreted-functions
    incremental-solving
+   kissat
+   sat-tuning
    bv-abstraction
    fp-abstraction
    linear-real-arithmetic

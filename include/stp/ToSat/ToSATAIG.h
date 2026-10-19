@@ -52,6 +52,7 @@ private:
   bool internalSolveFailed = false;
   std::string internalSolveFailure;
   bool encode_only_ = false;
+  bool satsuma_allowed_ = false;
   simplifier::constantBitP::ConstantBitPropagation* cb;
 
   ArrayTransformer* arrayTransformer;
@@ -216,6 +217,9 @@ public:
   // Tell the lowering that the refinement it should expect is only the
   // uninterpreted-function loop; see ufOnlyRefinement_. Set before CallSAT.
   void setUFOnlyRefinement(bool ufOnly) { ufOnlyRefinement_ = ufOnly; }
+  // Only the batch driver can authorize preprocessing: symmetries of a
+  // partial encoding need not survive later refinement or assumptions.
+  void setSatsumaAllowed(bool allowed) { satsuma_allowed_ = allowed; }
 
   bool hasBVEQAbstractions() const { return abstraction_.hasEqualities(); }
   bool hasBVTermAbstractions() const { return abstraction_.hasTerms(); }

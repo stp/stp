@@ -88,7 +88,7 @@ inline void add_hard_factoring(stp::api::TermManager& tm, stp::api::Solver& s)
 // notices them between its solver calls (capabilities: interrupt.cryptominisat).
 inline std::optional<std::string> interruptible_backend()
 {
-  for (const char* name : {"cadical", "minisat"})
+  for (const char* name : {"cadical", "minisat", "kissat"})
     if (stp::api::has_sat_backend(name))
       return std::string(name);
   return std::nullopt;

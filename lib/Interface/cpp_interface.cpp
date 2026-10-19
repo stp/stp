@@ -247,6 +247,12 @@ UserDefinedFlags& Cpp_interface::getUserFlags()
   return bm.UserFlags;
 }
 
+bool Cpp_interface::incrementalSession() const
+{
+  return bm.UserFlags.incremental_mode != UserDefinedFlags::IncrementalMode::OFF &&
+         (session_incremental || produce_unsat_cores);
+}
+
 bool Cpp_interface::declaredSortsEnabled() const
 {
   return bm.UserFlags.enable_uninterpreted_functions || ax_enabled_by_logic;

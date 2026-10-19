@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include "stp/Util/Attributes.h"
 #include "stp/Sat/CadicalOptions.h"
+#include "stp/Sat/SatSearchOptions.h"
 #include "stp/config.h"
 
 #include <chrono>
@@ -233,6 +234,10 @@ public:
   bool enable_merge_same = false;
   bool enable_pair_extract = true;
   bool enable_common_subsum = true;
+  // The guarded unsigned successor/predecessor bounds can change SAT search.
+  bool enable_adjacent_bounds = false;
+  bool enable_conditional_equality = false;
+  bool enable_double_equality = false;
 
   // Take a factor several of a sum's products have in common out of the
   // sum, so one multiplication is built where there were several. See
@@ -594,6 +599,12 @@ public:
   // target: nothing is gained by being nearer it. --ackermanize is a request
   // and ignores this; 0 refuses every unasked selection.
   unsigned array_eager_budget = 4000;
+
+  // Optional late eager choice after ordinary batch preprocessing. Zero
+  // leaves the existing early/lazy policy in charge. Both bounds are strict.
+  int array_late_read_limit = 0;
+  unsigned array_late_expansion_limit = 200;
+  unsigned array_late_congruence_limit = 4000;
 
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.
@@ -1820,6 +1831,11 @@ public:
 
   enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
 
+  // Optional batch CNF choice while whole-array equality still needs
+  // refinement. An explicit CNF effort remains authoritative.
+  bool array_equality_gia_cnf = false;
+  int array_equality_gia_min_reads = 16;
+
   // AND-node count at or above which AUTO stops paying for CNF
   // minimisation: against the recorded estimate it selects NEW_MEDIUM
   // there, and on the estimate-less fallback it drops MEDIUM to VERY_LOW.
@@ -2008,16 +2024,43 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    CADICAL_SOLVER
+    CADICAL_SOLVER,
+    KISSAT_SOLVER
   };
 
   enum SATSolvers solver_to_use;
+  std::string satsuma_mode = "off";
+  std::string satsuma_profile = "stp";
+  std::string satsuma_ordering = "auto";
+  int satsuma_component_limit = -1;
+  int satsuma_input_limit = -1;
+  int satsuma_iteration_limit = -1;
 
-  // Which answer to tune the SAT search towards. NONE, the default, leaves
-  // every backend at its own settings, so the option is opt-in.
+  // Automatic profiles supply defaults only after a frontend identifies the
+  // logic and session mode. Explicit option values take precedence.
+  bool sat_tuning_auto = true;
+
+  // Which answer to tune the SAT search towards. NONE leaves the backend's
+  // settings alone when no automatic profile supplies a bias.
   SearchBias search_bias = static_cast<SearchBias>(0);
+  bool kissat_trail_reuse = true;
+  int kissat_trail_reuse_mode = -1;
+  bool kissat_probe = true;
+  bool kissat_lucky_probe = false;
+  int kissat_incremental_greedy = 0;
+  int kissat_greedy_conflicts = 100;
+  int kissat_greedy_decisions = 10000;
+  int kissat_greedy_growth = 4;
+  bool kissat_greedy_phase_cache = false;
+  int kissat_eliminate = -1;
+  int kissat_stable = -1;
+  int kissat_one_shot_stable = -1;
+  bool kissat_batch_only = false;
+  int kissat_import_order = 0;
+  bool kissat_adaptive_cnf = false;
 
   CadicalOptions cadical_options;
+  SatSearchOptions sat_search_options;
 
   // Whether CaDiCaL may use bounded variable addition (its "factor"
   // technique). ON is the default: measured on QF_BV, where the AUTO
@@ -2142,6 +2185,9 @@ public:
     enable_merge_same = false;
     enable_pair_extract = false;
     enable_common_subsum = false;
+    enable_adjacent_bounds = false;
+    enable_conditional_equality = false;
+    enable_double_equality = false;
     enable_common_factor = false;
     enable_linear_form = false;
     enable_ite_context = false;
@@ -2319,13 +2365,16 @@ public:
     // CryptoMiniSat leads because a build that went to the trouble of
     // linking it meant to use it; CaDiCaL follows because it is the only
     // backend on by default, so it is what a stock build solves with.
-    // MiniSat is the last resort and is not guarded: CMakeLists.txt refuses
-    // a build with no backend at all, so the fall-through is only reached
-    // when MiniSat is the one that is there.
+    // MiniSat follows those two, then the optional incremental Kissat.
+    // CMakeLists.txt refuses a build with no backend at all.
 #if STP_BUILD_WITH_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #elif STP_BUILD_WITH_CADICAL
     solver_to_use = CADICAL_SOLVER;
+#elif STP_BUILD_WITH_MINISAT
+    solver_to_use = MINISAT_SOLVER;
+#elif STP_BUILD_WITH_KISSAT
+    solver_to_use = KISSAT_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
 #endif

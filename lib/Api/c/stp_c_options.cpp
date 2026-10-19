@@ -148,11 +148,14 @@ std::uint64_t ms_of(std::chrono::milliseconds d)
   return d.count() < 0 ? STP_DURATION_NONE : static_cast<std::uint64_t>(d.count());
 }
 
-// The registry rows of one tier (-1: every tier), in registry order.
+// Stable names follow the pinned enum IDs; other tiers use registry order.
+// A tier of -1 selects every tier.
 const detail::OptionSpec* nth_spec(int tier, std::size_t index)
 {
   if (tier != -1 && (tier < 0 || tier > STP_TIER_DIAGNOSTIC))
     return nullptr;
+  if (tier == STP_TIER_STABLE)
+    return detail::stable_option_spec(index);
   std::size_t n = 0;
   const detail::OptionSpec* specs = detail::option_specs(n);
   std::size_t seen = 0;

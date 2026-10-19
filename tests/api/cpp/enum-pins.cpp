@@ -355,5 +355,10 @@ TEST(EnumPins, every_stable_option_keeps_its_value_and_name)
   EXPECT_EQ(Options::name_of(Option::CHECK_SANITY), "check-sanity");
   EXPECT_EQ(Options::stable_option("check-sanity"), Option::CHECK_SANITY);
   EXPECT_STREQ(stp_option_name(STP_OPT_CHECK_SANITY), "check-sanity");
-  EXPECT_GE(static_cast<int>(Option::NUM_STABLE_OPTIONS), 22);
+  EXPECT_EQ(static_cast<int>(Option::SAT_TUNING), 22);
+  EXPECT_EQ(STP_OPT_SAT_TUNING, 22);
+  EXPECT_EQ(Options::name_of(Option::SAT_TUNING), "sat-tuning");
+  EXPECT_EQ(Options::stable_option("sat-tuning"), Option::SAT_TUNING);
+  EXPECT_STREQ(stp_option_name(STP_OPT_SAT_TUNING), "sat-tuning");
+  EXPECT_GE(static_cast<int>(Option::NUM_STABLE_OPTIONS), 23);
 }

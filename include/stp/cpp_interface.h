@@ -776,6 +776,7 @@ public:
   // one is read as ALL, but names nothing.
   void noteDeclaredLogic(const std::string& logic) { declared_logic = logic; }
   const std::string& declaredLogic() const { return declared_logic; }
+  DLL_PUBLIC bool incrementalSession() const;
   DLL_PUBLIC void requireCommand(const std::string& command);
   DLL_PUBLIC void unavailableQuery(const std::string& command,
                                    const std::string& option);

@@ -61,6 +61,37 @@ using std::endl;
 
 static bool debug_simplifyingNodeFactory = false;
 
+// Recover x from a two-times-x term, including the concat/extract form of
+// a constant left shift. Inspect existing constants without allocating any.
+static stp::ASTNode doubledOperand(const stp::ASTNode& term)
+{
+  const unsigned width = term.GetValueWidth();
+  if (width <= 1 || term.Degree() != 2)
+    return stp::ASTNode();
+  if (term.GetKind() == stp::BVLEFTSHIFT && term[1].GetKind() == stp::BVCONST &&
+      CONSTANTBV::Set_Max(term[1].GetBVConst()) == 0)
+    return term[0];
+  if (term.GetKind() == stp::BVMULT)
+    for (unsigned i = 0; i < 2; i++)
+      if (term[i].GetKind() == stp::BVCONST &&
+          CONSTANTBV::Set_Min(term[i].GetBVConst()) == 1 &&
+          CONSTANTBV::Set_Max(term[i].GetBVConst()) == 1)
+        return term[1 - i];
+  if (term.GetKind() != stp::BVCONCAT || term[1].GetKind() != stp::BVCONST ||
+      term[1].GetValueWidth() != 1 ||
+      !CONSTANTBV::BitVector_is_empty(term[1].GetBVConst()))
+    return stp::ASTNode();
+  const stp::ASTNode& high = term[0];
+  if (high.GetKind() != stp::BVEXTRACT || high.Degree() != 3 ||
+      high.GetValueWidth() != width - 1 || high[0].GetValueWidth() != width ||
+      high[1].GetKind() != stp::BVCONST || high[2].GetKind() != stp::BVCONST ||
+      !CONSTANTBV::BitVector_is_empty(high[2].GetBVConst()) ||
+      CONSTANTBV::Set_Max(high[1].GetBVConst()) >= 32 ||
+      high[1].GetUnsignedConst() != width - 2)
+    return stp::ASTNode();
+  return high[0];
+}
+
 // True if the constant has exactly one bit set.
 static bool hasSingleOneBit(const stp::ASTNode& n)
 {
@@ -997,6 +1028,42 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
         const ASTNode gt = NodeFactory::CreateNode(stp::BVGT, x, notC);
         return side == 1 ? gt : NodeFactory::CreateNode(stp::NOT, gt);
       }
+  }
+
+  // An adjacent bound removes the addition, with its wrap point excluded:
+  // (x + 1) >u y <=> x != ones && x >=u y,
+  // y >u (x - 1) <=> x != zero && y >=u x.
+  if (bm.UserFlags.enable_adjacent_bounds)
+  {
+    for (unsigned side = 0; side < 2; side++)
+    {
+      const ASTNode& plus = children[side];
+      if (plus.GetKind() != BVPLUS || plus.Degree() != 2)
+        continue;
+      const unsigned width = plus.GetValueWidth();
+      for (unsigned i = 0; i < 2; i++)
+      {
+        if (plus[i].GetKind() != stp::BVCONST)
+          continue;
+        // Do not allocate a constant just to test an unsuccessful match.
+        const bool adjacent =
+            side == 0 ? CONSTANTBV::Set_Max(plus[i].GetBVConst()) == 0
+                      : CONSTANTBV::BitVector_is_full(plus[i].GetBVConst());
+        if (!adjacent)
+          continue;
+        const ASTNode& x = plus[1 - i];
+        const ASTNode& y = children[1 - side];
+        const ASTNode bound =
+            side == 0 ? bm.CreateMaxConst(width) : bm.CreateZeroConst(width);
+        const ASTNode noWrap = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(EQ, x, bound));
+        const ASTNode greater = side == 0
+                                    ? NodeFactory::CreateNode(stp::BVGT, y, x)
+                                    : NodeFactory::CreateNode(stp::BVGT, x, y);
+        return NodeFactory::CreateNode(
+            stp::AND, noWrap, NodeFactory::CreateNode(stp::NOT, greater));
+      }
+    }
   }
 
   //2nd part is the same ->only care about 1st part
@@ -2277,6 +2344,42 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTChildren children)
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
     return stp::constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
 
+  // x + y = 2*x is y = x even when the addition wraps. Peeling a run
+  // iteratively also handles deeply shared sums without one frame per step.
+  if (bm.UserFlags.enable_double_equality &&
+      ((k1 == BVPLUS && in1.Degree() == 2) ||
+       (k2 == BVPLUS && in2.Degree() == 2)))
+  {
+    ASTNode lhs = in1, rhs = in2;
+    bool changed = false;
+    for (;;)
+    {
+      bool matched = false;
+      for (unsigned side = 0; side < 2 && !matched; side++)
+      {
+        const ASTNode& sum = side == 0 ? lhs : rhs;
+        if (sum.GetKind() != BVPLUS || sum.Degree() != 2)
+          continue;
+        const ASTNode base = doubledOperand(side == 0 ? rhs : lhs);
+        if (base.IsNull())
+          continue;
+        for (unsigned i = 0; i < 2; i++)
+          if (sum[i] == base)
+          {
+            const ASTNode other = sum[1 - i];
+            lhs = other;
+            rhs = base;
+            matched = changed = true;
+            break;
+          }
+      }
+      if (!matched)
+        break;
+    }
+    if (changed)
+      return NodeFactory::CreateNode(EQ, lhs, rhs);
+  }
+
   if ((k1 == BVNOT && k2 == BVNOT) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
 
@@ -2991,6 +3094,26 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(
   }
   else
   {
+    if (bm.UserFlags.enable_conditional_equality && child1.GetKind() == EQ &&
+        child2.GetKind() == EQ && child1.Degree() == 2 && child2.Degree() == 2)
+      for (unsigned i = 0; i < 2 && retval.IsNull(); i++)
+        for (unsigned j = 0; j < 2 && retval.IsNull(); j++)
+        {
+          const ASTNode& symbol = child1[i];
+          if (symbol.GetKind() != stp::SYMBOL || symbol != child2[j] ||
+              symbol.GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
+            continue;
+          // Pull a conditional definition into one equality, so word-level
+          // substitution can see it. A symbol also prevents cycling with
+          // the constant-equality distribution in CreateSimpleEQ.
+          const ASTNode value =
+              NodeFactory::CreateTerm(ITE, symbol.GetValueWidth(), child0,
+                                      child1[1 - i], child2[1 - j]);
+          retval = NodeFactory::CreateNode(EQ, symbol, value);
+        }
+    if (!retval.IsNull())
+      return retval;
+
     // Each branch knows its own condition, so a test the condition decides
     // goes. e.g. y=2 rules out y=1 without the two ever matching.
     const ASTNode thenBranch = decideBranch(child0, true, child1);

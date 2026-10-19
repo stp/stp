@@ -13,6 +13,8 @@
 ; PHASE: ^unsat
 ; OFF: ^unsat
 (set-logic QF_ABV)
+; Keep the reads available for the hints under automatic batch tuning.
+(set-option :array-late-read-limit 0)
 (declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))
 (declare-fun i0 () (_ BitVec 8))
 (declare-fun i1 () (_ BitVec 8))
@@ -38,8 +40,10 @@
 (assert (= (select a i9) #x0a))
 (assert (= (select a i10) #x0b))
 (assert (= (select a i11) #x0c))
-; i0 and i1 are forced equal by the arithmetic, not by a substitution the
-; simplifier would take, and the two reads disagree on the value there.
-(assert (bvult i0 i1))
-(assert (bvult i1 (bvadd i0 #x01)))
+; Squares are strictly increasing on 0..15, with no 8-bit overflow.
+; Their equality forces the indices equal, and array congruence refutes
+; the different read values. The arithmetic alone remains satisfiable.
+(assert (bvule i0 #x0f))
+(assert (bvule i1 #x0f))
+(assert (= (bvmul i0 i0) (bvmul i1 i1)))
 (check-sat)

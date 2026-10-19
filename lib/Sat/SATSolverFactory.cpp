@@ -41,6 +41,10 @@ THE SOFTWARE.
 #include "stp/Sat/SimplifyingMinisat.h"
 #endif
 
+#ifdef USE_KISSAT
+#include "stp/Sat/Kissat.h"
+#endif
+
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -89,6 +93,10 @@ std::vector<std::string> compiledSolverVersions()
   // MiniSat has no version API, and STP links a checkout that carries no
   // version of its own either.
   solvers.push_back("minisat (no version reported)");
+#endif
+
+#ifdef USE_KISSAT
+  solvers.push_back(std::string("kissat ") + kissat_version() + " (incremental)");
 #endif
 
   return solvers;
@@ -146,15 +154,38 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
                 << std::endl;
       exit(-1);
 #endif
+    case UserDefinedFlags::KISSAT_SOLVER:
+#ifdef USE_KISSAT
+    {
+      auto solver = std::make_unique<Kissat>(
+          flags.kissat_trail_reuse, flags.kissat_stable, flags.kissat_probe,
+          flags.kissat_trail_reuse_mode, flags.kissat_eliminate);
+      solver->setImportOrder(flags.kissat_import_order);
+      solver->setOneShotSearchMode(flags.kissat_one_shot_stable);
+      solver->setGreedyOptions(
+          {flags.kissat_incremental_greedy, flags.kissat_greedy_conflicts,
+           flags.kissat_greedy_decisions, flags.kissat_greedy_growth,
+           flags.kissat_greedy_phase_cache});
+      newS = solver.release();
+    }
+#else
+      std::cerr << "Kissat support was not enabled at configure time." << std::endl;
+      exit(-1);
+#endif
+      break;
     default:
       std::cerr << "ERROR: Undefined solver to use." << std::endl;
       exit(-1);
       break;
   };
 
+  std::unique_ptr<SATSolver> configured(newS);
+  if (flags.sat_search_options.hasOverrides() &&
+      !configured->setSearchOptions(flags.sat_search_options))
+    throw std::invalid_argument("SAT phase options require CaDiCaL or Kissat");
   if (flags.random_seed != 0)
-    newS->setSeed(flags.random_seed);
-  return newS;
+    configured->setSeed(flags.random_seed);
+  return configured.release();
 }
 
 void validateCadicalOptions(const UserDefinedFlags& flags)
@@ -167,10 +198,14 @@ void validateCadicalOptions(const UserDefinedFlags& flags)
 
 void applySearchBias(SATSolver& s, const UserDefinedFlags& flags, bool warn)
 {
-  if (flags.search_bias == SearchBias::NONE ||
-      s.setSearchBias(flags.search_bias))
+  if (flags.search_bias == SearchBias::NONE)
     return;
-  if (warn)
+  const bool accepted = s.setSearchBias(flags.search_bias);
+  // Explicit phase choices take precedence over named configurations.
+  if (flags.sat_search_options.hasOverrides() &&
+      !s.setSearchOptions(flags.sat_search_options))
+    throw std::invalid_argument("SAT phase options require CaDiCaL or Kissat");
+  if (!accepted && warn)
   {
     std::cerr << "Warning: the SAT solver in use has no '"
               << searchBiasName(flags.search_bias)

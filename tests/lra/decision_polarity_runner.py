@@ -67,14 +67,36 @@ FALSE_LATE_SOURCE = """
 (exit)
 """
 
-DEFAULTS_TO_FALSE = {"--minisat"}
+# CryptoMiniSat's first candidate for FALSE_LATE_SOURCE is consistent, so the
+# theory never joins its search there; it is given one clause instead, which
+# serves for both. CryptoMiniSat decides (< (- x y) 10) false, and the clause
+# then makes (<= (+ x y) 11) true, which the bounds refute: x - y >= 10 puts
+# x + y at 12 or more. When the theory joins, that decision is offered false
+# again, and the advice, read off the tableau at the bounds where x - y is 0,
+# turns it around; with first-search on it does so from the first decision.
+CMS_SOURCE = """
+(set-logic QF_LRA)
+(declare-fun x () Real)
+(declare-fun y () Real)
+(assert (>= x 1))
+(assert (>= y 1))
+(assert (or (< (- x y) 10) (<= (+ x y) 11)))
+(check-sat)
+(exit)
+"""
+
+# Kissat's first decision on SOURCE is one the advice agrees with, so
+# LATE_SOURCE serves for both.
+SOURCES = {
+    "--minisat": (FALSE_SOURCE, FALSE_LATE_SOURCE),
+    "--cryptominisat": (CMS_SOURCE, CMS_SOURCE),
+    "--kissat": (LATE_SOURCE, LATE_SOURCE),
+}
 
 
 def main():
     backend = sys.argv[2] if len(sys.argv) > 2 else "--cadical"
-    first_source, late_source = ((FALSE_SOURCE, FALSE_LATE_SOURCE)
-                                 if backend in DEFAULTS_TO_FALSE
-                                 else (SOURCE, LATE_SOURCE))
+    first_source, late_source = SOURCES.get(backend, (SOURCE, LATE_SOURCE))
     rejected = subprocess.run(
         [sys.argv[1], "--SMTLIB2", backend, "--lra-decision-polarity=1",
          "--lra-theory-propagation=0"],

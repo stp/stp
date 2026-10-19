@@ -133,6 +133,7 @@ build compiled in:
 1. CryptoMiniSat
 2. CaDiCaL
 3. MiniSat
+4. Incremental Kissat
 
 CryptoMiniSat is therefore the default wherever it is linked, and
 CaDiCaL is what a stock build solves with. CaDiCaL is also the one
@@ -140,7 +141,7 @@ always available: it is enabled when nothing is said, needs no system
 library, and the build can produce one itself, so a query is never left
 without a solver. CryptoMiniSat is linked whenever it is installed, or
 can be built (``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way
-``--cadical``, ``--cryptominisat`` or ``--minisat`` overrides the order
+``--cadical``, ``--cryptominisat``, ``--minisat`` or ``--kissat`` overrides the order
 for one run.
 
 The two other values are for builds that would rather not depend on what
@@ -288,6 +289,14 @@ builds STP, and configure says whether it has the interface. Without it,
 and always with ``--simplifying-minisat``, the arithmetic theory runs in
 the full-lazy loop, judging complete assignments rather than working
 inside the search.
+
+Incremental Kissat is optional and off by default. Enable it with
+``-DUSE_KISSAT=ON``; ``-DENABLE_AUTO_DOWNLOAD=ON`` fetches and builds a pinned
+commit on the ``stp`` branch of `stp/kissat <https://github.com/stp/kissat>`__.
+This fork supplies assumptions and repeated solving for STP's incremental
+driver and refinement loops, and clause exchange with search
+diversification for ``stp-p``. A prebuilt checkout can be chosen explicitly
+with ``-DKISSAT_DIR=<path>``. See :doc:`kissat` for the API and build details.
 
 Every dependency is fetched and built by the build itself under
 ``-DENABLE_AUTO_DOWNLOAD=ON``; none of them needs a script beforehand.

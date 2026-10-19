@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define SATSOLVER_H_
 
 #include "SearchBias.h"
+#include "SatSearchOptions.h"
 #include <cassert>
 #include <chrono>
 #include <cstdint>
@@ -131,6 +132,10 @@ public:
 
   virtual bool supportsAssumptions() const { return false; }
 
+  // The caller guarantees a complete formula, one ordinary search, no
+  // assumptions and no later refinement clauses. Optional performance hint.
+  virtual bool configureOneShot() { return false; }
+
   typedef uint8_t lbool;
 
   static inline Lit mkLit(uint32_t var, bool sign)
@@ -155,6 +160,12 @@ public:
   {
     assertConfigurable("setSearchBias");
     return setSearchBiasInternal(bias);
+  }
+
+  bool setSearchOptions(const SatSearchOptions& options)
+  {
+    assertConfigurable("setSearchOptions");
+    return setSearchOptionsInternal(options);
   }
 
   // Ask the backend to turn on bounded variable addition (BVA, CaDiCaL's
@@ -626,6 +637,12 @@ public:
 
   virtual void enableRefinement(const bool /*enable*/) {}
 
+  // Enable an optional disposable candidate search on large additions to a
+  // persistent formula. A candidate must satisfy the original clauses and
+  // current assumptions; inconclusive attempts leave ordinary solving intact.
+  // Called while the backend is still empty. Other backends may decline.
+  virtual bool enableLuckyProbe() { return false; }
+
   // TRUE when nClauses() is implemented, i.e. the backend can report how
   // many clauses it currently holds (after simplify(), the post-propagation
   // count). Callers with a fallback should ask this before calling it.
@@ -665,6 +682,10 @@ protected:
   // above, which check the window first. FALSE means the backend has no such
   // technique -- a performance hint declined, not an error.
   virtual bool setSearchBiasInternal(SearchBias /*bias*/) { return false; }
+  virtual bool setSearchOptionsInternal(const SatSearchOptions& /*options*/)
+  {
+    return false;
+  }
   virtual bool enableBVAInternal() { return false; }
   virtual bool enableTrailReuseInternal(TrailReuse /*scope*/)
   {

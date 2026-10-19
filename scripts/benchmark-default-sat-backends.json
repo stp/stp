@@ -1,0 +1,6 @@
+[
+  {"name": "kissat", "args": ["--kissat"]},
+  {"name": "cadical", "args": ["--cadical"]},
+  {"name": "cryptominisat", "args": ["--cryptominisat"]},
+  {"name": "minisat", "args": ["--minisat"]}
+]

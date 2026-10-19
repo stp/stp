@@ -1097,6 +1097,20 @@ bool lraGaveUpOnABudget(const std::exception& thrown)
 {
   return lra::gaveUpOnABudget(thrown);
 }
+
+// The backends the UF search propagator runs on: CaDiCaL, and Kissat when
+// it hosts a theory propagator (a one-shot Kissat does not). The others that
+// can host one (CryptoMiniSat and MiniSat with the interface) have not been
+// tried with it.
+bool hostsUFSearch(SATSolver& solver, const UserDefinedFlags& flags)
+{
+#ifdef USE_CADICAL
+  if (dynamic_cast<Cadical*>(&solver) != NULL)
+    return true;
+#endif
+  return flags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER &&
+         solver.supportsTheoryPropagator();
+}
 } // namespace
 
 SOLVER_RETURN_TYPE
@@ -1157,15 +1171,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                   << ", conflicts=" << propagator->conflicts() << std::endl;
     }
   } ufSearchScope{Ctr_Example, bm, &ufSearch};
-#ifdef USE_CADICAL
   if (bm->UserFlags.uf_search_conflicts && bm->UserFlags.uf_qf_uf_logic &&
       batchUFView->active() && bm->before_search == NULL &&
-      dynamic_cast<Cadical*>(&NewSolver) != NULL)
+      hostsUFSearch(NewSolver, bm->UserFlags))
   {
     NewSolver.expectTheoryPropagator();
     Ctr_Example->setUFSearchPropagator(&ufSearch);
   }
-#endif
 
   std::unique_ptr<lra::LraCoordinator, QueryTimedDelete<lra::LraCoordinator>>
       lraCoordinator(nullptr, {bm->query_timing, QueryPhase::LraCleanup});
@@ -2026,10 +2038,64 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // skipping it for a prepared registry would silently bind no reads.
   assert(!extPrepared || arrayops);
 
+  // Select from the registry that remains active after preprocessing, and
+  // require a read structure beyond the equality witnesses. The solve's
+  // RestoreFlags scope restores this query-local CNF choice on every exit.
+  const bool chooseEqualityGia =
+      bm->UserFlags.array_equality_gia_cnf && extActive &&
+      bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
+      !numberOfReadsLessThan(inputToSat,
+                             bm->UserFlags.array_equality_gia_min_reads);
+  if (bm->UserFlags.array_equality_gia_cnf && bm->UserFlags.stats_flag)
+    cerr << "Array equality CNF policy: active=" << (extActive ? "on" : "off")
+         << " min-reads=" << bm->UserFlags.array_equality_gia_min_reads
+         << " selected=" << (chooseEqualityGia ? "gia-low" : "unchanged")
+         << endl;
+  if (chooseEqualityGia)
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+
+  // Delay this optional choice until bit-vector preprocessing has reduced
+  // the array graph. Keep array equality on its own refinement path, and
+  // retain the explicit request's ordinary lowering policy.
+  const bool considerLateEager = arrayops && !extActive &&
+                                 !bm->UserFlags.ackermannisation &&
+                                 bm->UserFlags.array_late_read_limit > 0;
+  const bool fitsLateArrayStructure =
+      considerLateEager &&
+      numberOfReadsLessThan(inputToSat, bm->UserFlags.array_late_read_limit) &&
+      arrayEagerCostLessThan(inputToSat,
+                             bm->UserFlags.array_late_expansion_limit);
+  // Read expansion and read congruence have independent costs: many reads
+  // over a flat array can pass the structural bound while introducing a
+  // quadratic number of index comparisons.
+  const uint64_t lateCongruenceCost =
+      fitsLateArrayStructure ? arrayCongruenceEstimate(inputToSat) : 0;
+  const bool expandLateArrays =
+      fitsLateArrayStructure &&
+      lateCongruenceCost <= bm->UserFlags.array_late_congruence_limit;
+  if (bm->UserFlags.stats_flag && considerLateEager)
+    cerr << "Array late eager policy: read-limit="
+         << bm->UserFlags.array_late_read_limit
+         << " expansion-limit=" << bm->UserFlags.array_late_expansion_limit
+         << " congruence-limit=" << bm->UserFlags.array_late_congruence_limit
+         << " congruence-estimate="
+         << (fitsLateArrayStructure ? std::to_string(lateCongruenceCost)
+                                    : "skipped")
+         << " selected=" << (expandLateArrays ? "on" : "off") << endl;
+  if (expandLateArrays)
+    bm->UserFlags.ackermannisation = true;
+
   if (arrayops)
   {
     inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
     bm->ASTNodeStats("after transformation: ", inputToSat);
+    if (expandLateArrays)
+    {
+      // The eager transform includes every read axiom, so arrays no longer
+      // require another SAT call. Other refinement sources remain separate.
+      arrayops = false;
+      assert(!containsArrayOps(inputToSat, bm));
+    }
   }
   bm->TermsAlreadySeenMap_Clear();
 
@@ -2084,6 +2150,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
+  // Explicit Ackermannisation can coexist with lazy array equality. An
+  // active registry can still add clauses, whatever the generic flag says.
+  toSATAIG.setSatsumaAllowed(!maybeRefinement && !arrayops && !extActive);
   toSATAIG.setArithmeticOnlyRefinement(
       lraActive && !nonArithmeticRefinement && !arrayops && !extActive);
   // The encoder may consume CB before CNF conversion. Match that handoff

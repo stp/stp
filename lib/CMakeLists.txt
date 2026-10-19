@@ -232,6 +232,17 @@ if (USE_CADICAL)
         ${stp_link_libs} ${CADICAL_LIBRARY})
 endif()
 
+if(USE_KISSAT)
+    list(APPEND stp_link_libs ${KISSAT_LIBRARY})
+    if(UNIX)
+        list(APPEND stp_link_libs m)
+    endif()
+endif()
+
+if(STP_BUILD_WITH_SATSUMA AND USE_SATSUMA_CLIQUER)
+    list(APPEND stp_link_libs ${SATSUMA_CLIQUER_LIBRARY})
+endif()
+
 # PRIVATE, not LINK_PUBLIC: these are implementation details of libstp, and
 # naming them in the link interface put them in the exported STPTargets.cmake,
 # where they were unusable - $<TARGET_FILE:libabc-pic> names a target no

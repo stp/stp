@@ -1570,7 +1570,7 @@ cdef class OptionsHandle:
 
 
 def option_names(int tier=-1):
-    """The registry names of a tier (-1: every tier), in table order."""
+    """Registry names (-1: all); enum order for the stable tier, table order otherwise."""
     cdef size_t n = stp_options_num_names(tier), i
     cdef const char* p
     out = []

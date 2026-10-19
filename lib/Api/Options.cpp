@@ -481,8 +481,14 @@ bool option_build_supported(const OptionSpec& spec)
   if (spec.requires_build == nullptr)
     return true;
   const std::string b = spec.requires_build;
+  if (b == "kissat")
+    return STP_BUILD_WITH_KISSAT != 0;
+  if (b == "bva")
+    return STP_BUILD_WITH_CADICAL != 0 || STP_BUILD_WITH_KISSAT != 0;
   if (b == "cadical")
     return STP_BUILD_WITH_CADICAL != 0;
+  if (b == "satsuma")
+    return STP_BUILD_WITH_SATSUMA != 0;
   if (b == "cryptominisat")
     return STP_BUILD_WITH_CRYPTOMINISAT != 0;
   if (b == "minisat")
@@ -839,6 +845,10 @@ void OptionsImpl::resolve(const char* /*fn*/) const
           have = "cryptominisat";
 #elif STP_BUILD_WITH_CADICAL
           have = "cadical";
+#elif STP_BUILD_WITH_MINISAT
+          have = "minisat";
+#elif STP_BUILD_WITH_KISSAT
+          have = "kissat";
 #else
           have = "minisat";
 #endif
@@ -917,6 +927,14 @@ OptionInfo OptionsImpl::info(std::string_view name) const
 std::vector<std::string> OptionsImpl::names(std::optional<Tier> tier) const
 {
   std::vector<std::string> out;
+  if (tier == Tier::STABLE)
+  {
+    // Stable names follow the pinned enum IDs, regardless of table order.
+    out.reserve(kNumStableOptions);
+    for (std::size_t id = 0; id < kNumStableOptions; ++id)
+      out.emplace_back(stable_option_spec(id)->name);
+    return out;
+  }
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
     if (!tier.has_value() || kOptionSpecs[i].tier == *tier)
       out.emplace_back(kOptionSpecs[i].name);
@@ -1014,6 +1032,24 @@ template <class F, class V> void assign_flag(F& field, V value)
 
 using Flags = UserDefinedFlags;
 
+bool custom_satsuma(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.satsuma_mode = as_str(v);
+  return true;
+}
+
+bool custom_satsuma_profile(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.satsuma_profile = as_str(v);
+  return true;
+}
+
+bool custom_satsuma_ordering(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.satsuma_ordering = as_str(v);
+  return true;
+}
+
 bool custom_produce_models(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.request_counterexample = as_bool(v);
@@ -1030,11 +1066,16 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
     t.flags.solver_to_use = Flags::CRYPTOMINISAT5_SOLVER;
 #elif STP_BUILD_WITH_CADICAL
     t.flags.solver_to_use = Flags::CADICAL_SOLVER;
+#elif STP_BUILD_WITH_MINISAT
+    t.flags.solver_to_use = Flags::MINISAT_SOLVER;
+#elif STP_BUILD_WITH_KISSAT
+    t.flags.solver_to_use = Flags::KISSAT_SOLVER;
 #else
     t.flags.solver_to_use = Flags::MINISAT_SOLVER;
 #endif
     return true;
   }
+  const bool have_kissat = STP_BUILD_WITH_KISSAT != 0;
   const bool have_cms = STP_BUILD_WITH_CRYPTOMINISAT != 0;
   const bool have_cadical = STP_BUILD_WITH_CADICAL != 0;
   const bool have_minisat = STP_BUILD_WITH_MINISAT != 0;
@@ -1042,6 +1083,8 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
     t.flags.solver_to_use = Flags::CRYPTOMINISAT5_SOLVER;
   else if (s == "cadical" && have_cadical)
     t.flags.solver_to_use = Flags::CADICAL_SOLVER;
+  else if (s == "kissat" && have_kissat)
+    t.flags.solver_to_use = Flags::KISSAT_SOLVER;
   else if (s == "minisat" && have_minisat)
     t.flags.solver_to_use = Flags::MINISAT_SOLVER;
   else if (s == "simplifying-minisat" && have_minisat)
@@ -1054,6 +1097,7 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
                       for (const auto& [have, name] :
                            {std::pair<bool, const char*>{have_cms, "cryptominisat"},
                             {have_cadical, "cadical"},
+                            {have_kissat, "kissat"},
                             {have_minisat, "minisat"},
                             {have_minisat, "simplifying-minisat"}})
                         if (have)
@@ -1285,6 +1329,12 @@ bool custom_incremental_inprobing(EngineTarget& t, const OptionSpec&, const Opti
   t.flags.incremental_inprobing = as_mode<Flags::BVAMode>(v);
   return true;
 }
+bool custom_sat_tuning(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.sat_tuning_auto = as_str(v) == "auto";
+  return true;
+}
+
 bool custom_search_bias(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   const std::string& s = as_str(v);
@@ -1431,9 +1481,10 @@ bool apply_option_to_engine(EngineTarget& t, std::size_t index, const OptionSpec
 #include "gen/option_apply.inc"
 }
 
-// Each entry's resolved value and whether it is at its default: the options
-// alone decide both, so a solver keeps them for the options' generation.
-void derive_options(const OptionsImpl& o, DerivedOptions& d)
+// Each entry's effective value and whether it is at its baseline default.
+// A solver invalidates this cache when its tuning context changes.
+void derive_options(const OptionsImpl& o, DerivedOptions& d,
+                     const SatTuningDefaults* tuning)
 {
   const ResolutionIndex& index = resolution_index();
   d.generation = 0; // holds nothing until complete
@@ -1445,12 +1496,27 @@ void derive_options(const OptionsImpl& o, DerivedOptions& d)
     const OptionSpec& spec = kOptionSpecs[i];
     d.resolved.push_back(o.resolved(i));
     const OptionValue& r = d.resolved.back();
+    // An explicit composite owns its implied value, including a value equal
+    // to the registry default, before automatic tuning supplies defaults.
+    const bool from_composite =
+        std::any_of(index.composites[i].begin(), index.composites[i].end(),
+                    [&](const auto& implied)
+                    {
+                      const std::size_t source = implied.first;
+                      return o.is_set[source] &&
+                             o.values[source].index() == 0 &&
+                             std::get<bool>(o.values[source]);
+                    });
     // printing a value is the test; an entry holding its default value (most
     // of them) prints as the default printed, which is known
     d.at_default[i] =
-        !o.is_set[i] && (r == index.defaults[i] ? static_cast<bool>(index.default_prints_as_default[i])
-                                                : option_text(spec, r) == spec.default_text);
+        !o.is_set[i] && !from_composite &&
+        (r == index.defaults[i]
+             ? static_cast<bool>(index.default_prints_as_default[i])
+             : option_text(spec, r) == spec.default_text);
   }
+  if (tuning != nullptr)
+    apply_sat_tuning_defaults(o, *tuning, d);
   d.generation = o.generation;
 }
 
@@ -1466,7 +1532,7 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
   DerivedOptions& derived = t.solver != nullptr ? t.solver->derived_options : local;
   if (derived.generation != o.generation)
   {
-    derive_options(o, derived);
+    derive_options(o, derived, t.solver != nullptr ? &t.solver->sat_tuning : nullptr);
     // The engine's remembered fixed points were ones under the old values.
     if (t.solver != nullptr && t.solver->stp != nullptr)
       t.solver->stp->forgetFixedPoints();
@@ -1491,6 +1557,57 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
     apply_option_to_engine(t, i, spec, r);
     if (off_default != nullptr)
       (*off_default)[i] = !at_default;
+  }
+  t.explicit_value = true;
+}
+
+// Parsed checks need only the tuning controls refreshed when their context
+// changes. Other registry entries can own frontend or theory state that must
+// be preserved through a streamed check. Include baseline values here too so
+// retiring a profile restores the controls it previously supplied.
+void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
+{
+  assert(t.solver != nullptr);
+  DerivedOptions& derived = t.solver->derived_options;
+  if (derived.generation != options.generation)
+    derive_options(options, derived, &t.solver->sat_tuning);
+  for (const char* name : {"search-bias",
+                           "sat-phase",
+                           "sat-forcephase",
+                           "sat-rephase",
+                           "sat-target",
+                           "kissat-stable",
+                           "kissat-one-shot-stable",
+                           "kissat-batch-only",
+                           "kissat-import-order",
+                           "kissat-adaptive-cnf",
+                           "kissat-probe",
+                           "kissat-eliminate",
+                           "kissat-incremental-greedy",
+                           "kissat-greedy-conflicts",
+                           "kissat-greedy-decisions",
+                           "kissat-greedy-growth",
+                           "kissat-greedy-phase-cache",
+                           "kissat-trail-reuse-mode",
+                           "cnf-generation-effort",
+                           "cnf-auto-threshold",
+                           "cadical-factor",
+                           "array-late-read-limit",
+                           "array-late-expansion-limit",
+                           "array-late-congruence-limit",
+                           "array-equality-gia-cnf",
+                           "array-equality-gia-min-reads",
+                           "bv-conditional-equality",
+                           "bv-double-equality"})
+  {
+    const OptionSpec& spec = *find_option(name);
+    const std::size_t index = option_index(&spec);
+    const bool at_default = derived.at_default[index];
+    if (at_default && !t.solver->engine_off_default[index])
+      continue;
+    t.explicit_value = options.is_set[index];
+    apply_option_to_engine(t, index, spec, derived.resolved[index]);
+    t.solver->engine_off_default[index] = !at_default;
   }
   t.explicit_value = true;
 }
