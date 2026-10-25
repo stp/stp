@@ -60,6 +60,7 @@ THE SOFTWARE.
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <vector>
 
 using namespace stp;
@@ -731,4 +732,83 @@ TEST(FpConstantFold, literal_backend_agrees_at_the_narrowest_formats)
   runDifferential(d, 2, 2);
   runDifferential(d, 2, 4);
   EXPECT_GT(d.checked, 56000u);
+}
+
+namespace
+{
+
+// The packed bits of (-1)^sign * 1.frac * 2^t in (eb, frac.size() + 1), as a
+// binary string; the biased exponent may be wider than a machine word.
+std::string packedBits(unsigned eb, bool sign, int t, const std::string& frac)
+{
+  std::string e(eb, '1');
+  e[0] = '0'; // the bias, 2^(eb-1) - 1
+  long carry = t;
+  for (int i = (int)eb - 1; i >= 0 && carry != 0; i--)
+  {
+    const long v = (e[i] - '0') + carry;
+    const long bit = ((v % 2) + 2) % 2;
+    carry = (v - bit) / 2;
+    e[i] = (char)('0' + bit);
+  }
+  return std::string(sign ? "1" : "0") + e + frac;
+}
+
+} // namespace
+
+// fp.to_ubv/fp.to_sbv at exponent fields of 64 bits and more (#1372). The
+// literal backend's decoder keeps the exponent in int64_t, so it must decline
+// these formats, and the evaluator must answer them by the circuit. Before
+// the fix the decoder's exponent was garbage there: in-range values came back
+// unspecified, negatives at or below -1 came back 0, and at eb = 66 symfpu's
+// literal precondition aborted.
+TEST(FpConstantFold, wide_exponent_integer_conversions_match_the_circuit)
+{
+  Fixture f;
+  const unsigned modes[] = {symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
+                            symbolic_fp::ROUND_NEAREST_TIES_TO_AWAY,
+                            symbolic_fp::ROUND_TOWARD_POSITIVE,
+                            symbolic_fp::ROUND_TOWARD_NEGATIVE,
+                            symbolic_fp::ROUND_TOWARD_ZERO};
+  const unsigned m = 8, sb = 4;
+  const ASTNode mc = f.mgr.CreateBVConst(32, m);
+  // Not zero: the unspecified choice has to be distinguishable from 0.
+  const ASTNode undef = f.mgr.CreateBVConst(m, 0x5A);
+  unsigned checked = 0;
+  for (const unsigned eb : {63u, 64u, 65u, 66u, 80u, 128u})
+  {
+    std::vector<std::string> values;
+    for (const bool sign : {false, true})
+      for (unsigned fr = 0; fr < 8; fr++)
+      {
+        const std::string frac = {(char)('0' + ((fr >> 2) & 1)),
+                                  (char)('0' + ((fr >> 1) & 1)),
+                                  (char)('0' + (fr & 1))};
+        for (int t = -3; t <= 9; t++)
+          values.push_back(packedBits(eb, sign, t, frac));
+        values.push_back(std::string(sign ? "1" : "0") + std::string(eb, '0') +
+                         frac); // zero and subnormals
+        values.push_back(std::string(sign ? "1" : "0") + std::string(eb, '1') +
+                         frac); // the infinities and NaN
+      }
+    for (const std::string& bits : values)
+    {
+      const ASTNode x = f.mgr.CreateFPConst(
+          f.mgr.CreateBVConst(bits, 2, eb + sb), eb, sb);
+      for (const unsigned mode : modes)
+        for (const Kind k : {FP_TO_UBV, FP_TO_SBV})
+        {
+          const ASTNode t = f.mgr.hashingNodeFactory->CreateTerm(
+              k, m, ASTVec{mc, f.rm(mode), x, undef});
+          if (eb >= 64)
+            ASSERT_TRUE(literal_fp::tryEvaluateFpConstant(&f.mgr, t).IsNull());
+          const ASTNode circuit = NonMemberBVConstEvaluator(
+              &f.mgr, FloatBlast::lowerOperation(&f.mgr, t));
+          ASSERT_EQ(circuit, NonMemberBVConstEvaluator(&f.mgr, t))
+              << _kind_names[k] << " eb=" << eb << " x=" << bits;
+          ++checked;
+        }
+    }
+  }
+  EXPECT_EQ(checked, 6u * 240u * 10u);
 }

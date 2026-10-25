@@ -162,6 +162,7 @@ struct FpPackedValue
   // finite value only.
   int64_t f = 0;
 };
+// Requires eb < 64.
 FpPackedValue decodeFpPackedValue(const ASTNode& packedConstant, unsigned eb,
                                   unsigned sb);
 
