@@ -233,6 +233,34 @@ TEST(fp_conversions, to_bitvector)
   EXPECT_EQ(m.uint64_value(sbv), 0xFEu); // -2, 8-bit
 }
 
+// float -> bit-vector at a 65-bit exponent field (#1372), read through the
+// model for conversions no assertion mentions. x is pinned to 6.5 between
+// its neighbours; the model's evaluation of these used to decode the
+// exponent in 64 bits, call the in-range value unspecified, and read back
+// the zero completion.
+TEST(fp_conversions, to_bitvector_at_a_wide_exponent)
+{
+  TermManager tm;
+  Solver s(tm, self_checking());
+  const Sort wide = tm.mk_fp_sort(65, 4);
+  // (sign, biased exponent 2^64 - 1 + 2, fraction), MSB first.
+  const auto value = [&](const char* frac)
+  {
+    return tm.mk_fp_from_bits(
+        wide, tm.mk_bv(69, std::string("0") + "1" + std::string(63, '0') + "1" + frac, 2));
+  };
+  const Term x = tm.declare("x", wide);
+  s.add(fp_lt(value("100"), x)); // 6.0
+  s.add(fp_lt(x, value("110")));  // 7.0
+  s.add(fp_to_sbv(8, tm.mk_rm(RoundingMode::RNE), x) == tm.mk_bv(8, 6));
+
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  EXPECT_EQ(m.uint64_value(fp_to_sbv(8, tm.mk_rm(RoundingMode::RNA), x)), 7u);
+  EXPECT_EQ(m.uint64_value(fp_to_ubv(8, tm.mk_rm(RoundingMode::RTZ), x)), 6u);
+  EXPECT_EQ(m.uint64_value(fp_to_ubv(8, tm.mk_rm(RoundingMode::RTP), x)), 7u);
+}
+
 // bit-vector -> float: reinterpret, signed conversion, unsigned conversion.
 TEST(fp_conversions, to_float)
 {

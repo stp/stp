@@ -796,6 +796,10 @@ ASTNode tryEvaluateFpConstant(STPMgr* bm, const ASTNode& n)
         return ASTNode();
       const floatingPointTypeInfo fmt = formatOf(n[2]);
       const unsigned eb = n[2].GetExpWidth(), sb = n[2].GetSigWidth();
+      // decodeFpPackedValue keeps the exponent in int64_t; a wider format
+      // is answered by the circuit.
+      if (eb >= 64)
+        return ASTNode();
       const bitWidthType m = n[0].GetUnsignedConst();
       if (m < 2)
         return ASTNode();

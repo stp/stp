@@ -1516,6 +1516,7 @@ unsigned fieldTrailingZeros(const ASTNode& c, unsigned lo, unsigned n)
 FpPackedValue decodeFpPackedValue(const ASTNode& c, unsigned eb, unsigned sb)
 {
   assert(c.GetKind() == BVCONST && c.GetValueWidth() == eb + sb);
+  assert(eb >= 1 && eb < 64); // the bias and exponents are int64_t
   const unsigned fw = sb - 1;
   const int64_t bias = ((int64_t)1 << (eb - 1)) - 1;
   const int64_t emin = 1 - bias;
