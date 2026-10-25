@@ -801,7 +801,9 @@ TEST(FpConstantFold, wide_exponent_integer_conversions_match_the_circuit)
           const ASTNode t = f.mgr.hashingNodeFactory->CreateTerm(
               k, m, ASTVec{mc, f.rm(mode), x, undef});
           if (eb >= 64)
+          {
             ASSERT_TRUE(literal_fp::tryEvaluateFpConstant(&f.mgr, t).IsNull());
+          }
           const ASTNode circuit = NonMemberBVConstEvaluator(
               &f.mgr, FloatBlast::lowerOperation(&f.mgr, t));
           ASSERT_EQ(circuit, NonMemberBVConstEvaluator(&f.mgr, t))
