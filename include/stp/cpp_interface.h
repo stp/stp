@@ -603,7 +603,7 @@ public:
                                   unsigned& sig_width) const;
 
   DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
-                                   int bit_width);
+                                   unsigned bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
                                    uint64_t bvconst);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);

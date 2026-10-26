@@ -792,9 +792,9 @@ public:
   ASTNode CreateZeroConst(unsigned int width);
   DLL_PUBLIC ASTNode CreateBVConst(CBV bv, unsigned width);
   ASTNode CreateBVConst(const char* strval, int base);
-  ASTNode CreateBVConst(std::string strval, int base, int bit_width);
+  ASTNode CreateBVConst(std::string strval, int base, unsigned bit_width);
   ASTNode CreateBVConst(unsigned int width, uint64_t bvconst);
-  ASTNode charToASTNode(unsigned char* strval, int base, int bit_width);
+  ASTNode charToASTNode(unsigned char* strval, int base, unsigned bit_width);
 
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
                                    unsigned exp_width, unsigned sig_width);

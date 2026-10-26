@@ -117,7 +117,7 @@ static bool exactExtendedProduct(NodeFactory* nf, bool isSigned,
                                  ASTNode& b, const TopBitKnownZero& knownZero)
 {
   if (prod.GetKind() != BVMULT || prod.Degree() != 2 ||
-      prod.GetValueWidth() < 2 * n)
+      prod.GetValueWidth() < 2 * uint64_t(n))
     return false;
   return extendedCore(nf, isSigned, prod[0], n, a, knownZero) &&
          extendedCore(nf, isSigned, prod[1], n, b, knownZero);

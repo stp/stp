@@ -916,6 +916,17 @@
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
                     "2 significand bits");
     }
+    if (uint64_t(exp_width) + sig_width > UINT32_MAX)
+      fatal_yyerror("a floating-point format is at most 4294967295 bits wide");
+  }
+
+  // A result width computed from its operands, which must fit the 32 bits
+  // every width is kept in; summed or multiplied in 32 bits it would wrap.
+  unsigned checkedBitVectorWidth(uint64_t width)
+  {
+    if (width > UINT32_MAX)
+      fatal_yyerror("a bit-vector is at most 4294967295 bits wide");
+    return static_cast<unsigned>(width);
   }
 
   // Named IEEE interchange formats, including the hidden significand bit.
@@ -1468,20 +1479,21 @@
       fatal_yyerror("fp: the sign must be a one-bit bitvector.");
     }
 
+    const unsigned int exp_width = exp_bits;
+    const unsigned int sig_width = checkedBitVectorWidth(uint64_t(sig_bits) + sign_bits);
+
+    // The format implied by the component widths gets the same floor and
+    // ceiling the sort rule enforces; without this, (fp #b0 #b1 #b1) built
+    // an eb = 1 format that every other entrance rejects. The ceiling also
+    // keeps the concatenations below from wrapping.
+    checkFpFormatWidths(exp_width, sig_width);
+
     // Plain stack nodes: newNode is only for values handed to bison, and
     // wrapping the intermediates in it leaked two heap nodes per literal.
     ASTNode first(stp::GlobalParserInterface->nf->CreateTerm(
         BVCONCAT, sign_bits + exp_bits, *sign, *exp));
     ASTNode packed(stp::GlobalParserInterface->nf->CreateTerm(
         BVCONCAT, sign_bits + exp_bits + sig_bits, first, *sig));
-
-    const unsigned int exp_width = exp_bits;
-    const unsigned int sig_width = sig_bits + sign_bits;
-
-    // The format implied by the component widths gets the same floor the
-    // sort rule enforces; without this, (fp #b0 #b1 #b1) built an
-    // eb = 1 format that every other entrance rejects.
-    checkFpFormatWidths(exp_width, sig_width);
 
     ASTNode* n;
     if (packed.GetKind() == BVCONST)
@@ -4086,14 +4098,14 @@ an_terms an_term
 an_const:
 BVCONST_HEXIDECIMAL_TOK
 {
-  unsigned width = $1->length()*4;
+  const unsigned width = checkedBitVectorWidth(uint64_t($1->length()) * 4);
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
   $$->SetValueWidth(width);
   stp::releaseParserValue($1);
 }
 | BVCONST_BINARY_TOK
 {
-  unsigned width = $1->length();
+  const unsigned width = checkedBitVectorWidth($1->length());
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
   $$->SetValueWidth(width);
   stp::releaseParserValue($1);
@@ -4589,12 +4601,12 @@ an_boolean { $$ = $1; }
   checkBitVectorTerm(*$2);
   // Bounds outside the operand end the parse: going on, the extract was
   // built anyway and folded, reading past a constant's bits.
-  int width = $1->first - $1->second + 1;
-  if (width < 0)
-    fatal_yyerror("Negative width in extract");
+  if ($1->first < $1->second)
+    fatal_yyerror("extract's top index is below its bottom index");
 
   if((unsigned)$1->first >= $2->GetValueWidth())
     fatal_yyerror("Parsing: Wrong width in BVEXTRACT");
+  const unsigned width = $1->first - $1->second + 1;
 
   ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $1->first);
   ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $1->second);
@@ -4608,7 +4620,8 @@ an_boolean { $$ = $1; }
 | id_bvzx an_term
 {
   checkBitVectorTerm(*$2);
-  unsigned w = $2->GetValueWidth() + $1->first;
+  const unsigned w =
+      checkedBitVectorWidth(uint64_t($2->GetValueWidth()) + $1->first);
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$2,width));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -4618,7 +4631,8 @@ an_boolean { $$ = $1; }
 | id_bvsx an_term
 {
   checkBitVectorTerm(*$2);
-  unsigned w = $2->GetValueWidth() + $1->first;
+  const unsigned w =
+      checkedBitVectorWidth(uint64_t($2->GetValueWidth()) + $1->first);
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$2,width));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -4670,7 +4684,8 @@ an_boolean { $$ = $1; }
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
-  const unsigned int width = $2->GetValueWidth() + $3->GetValueWidth();
+  const unsigned int width = checkedBitVectorWidth(
+      uint64_t($2->GetValueWidth()) + $3->GetValueWidth());
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$2, *$3));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
@@ -4870,6 +4885,7 @@ an_boolean { $$ = $1; }
       fatal_yyerror("One or more repeats please");
 
   unsigned w = $2->GetValueWidth();
+  checkedBitVectorWidth(uint64_t(w) * count);
   ASTNode n =  *$2;
 
   for (unsigned i =1; i < count; i++)

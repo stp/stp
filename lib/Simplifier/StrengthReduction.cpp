@@ -393,7 +393,7 @@ namespace
   static bool multMayOverflow(const UnsignedInterval* a,
                               const UnsignedInterval* b, unsigned width)
   {
-    if (a == nullptr || b == nullptr)
+    if (a == nullptr || b == nullptr || width > (UINT32_MAX - 1) / 2)
       return true;
 
     const unsigned ew = 2 * width + 1;

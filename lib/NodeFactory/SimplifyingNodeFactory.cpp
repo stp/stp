@@ -2332,7 +2332,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTChildren children)
   const ASTNode& in2 = swap ? children[0] : children[1];
   const Kind k1 = in1.GetKind();
   const Kind k2 = in2.GetKind();
-  const int width = in1.GetValueWidth();
+  const unsigned width = in1.GetValueWidth();
 
   if (in1 == in2)
     // terms are syntactically the same
@@ -2575,15 +2575,15 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTChildren children)
   }
 
   if (k1 == stp::BVCONST && k2 == stp::BVSX &&
-      (in2[0].GetValueWidth() != (unsigned)width))
+      (in2[0].GetValueWidth() != width))
   {
     // Each of the bits in the extended part, and one into the un-extended part
     // must be the same.
     bool foundZero = false, foundOne = false;
-    const int original_width = in2[0].GetValueWidth();
-    const int new_width = in2.GetValueWidth();
+    const unsigned original_width = in2[0].GetValueWidth();
+    const unsigned new_width = in2.GetValueWidth();
 
-    for (int i = original_width - 1; i < new_width; i++)
+    for (unsigned i = original_width - 1; i < new_width; i++)
     {
       if (CONSTANTBV::BitVector_bit_test(in1.GetBVConst(), i))
         foundOne = true;
@@ -3663,7 +3663,7 @@ ASTNode SimplifyingNodeFactory::narrowExtract(unsigned width,
 ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
 {
   ASTNode result;
-  const int width = n0.GetValueWidth();
+  const unsigned width = n0.GetValueWidth();
 
   // a + (-b) * (a / b) is the remainder a rem b. Tried ahead of the chain
   // below so that the negation-pulling rules at its end cannot claim the

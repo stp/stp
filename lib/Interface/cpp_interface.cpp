@@ -485,7 +485,8 @@ bool Cpp_interface::lookupSortAlias(const std::string& name,
   return true;
 }
 
-ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
+ASTNode Cpp_interface::CreateBVConst(string& strval, int base,
+                                     unsigned bit_width)
 {
   return bm.CreateBVConst(strval, base, bit_width);
 }

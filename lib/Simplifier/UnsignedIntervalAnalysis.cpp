@@ -921,7 +921,9 @@ namespace stp
       }
 
       // Bignum fallback for wider values: the same-block case only.
-      // Wide enough for the bound products.
+      // Wide enough for the bound products, which must fit a 32-bit width.
+      if (width > (UINT32_MAX - 2) / 2)
+        return;
       const unsigned wide = 2 * width + 2;
 
       CBV aW = widenTo(a, wide);

@@ -653,7 +653,7 @@ ASTNode ManagerImpl::bv_const(std::uint32_t width, std::uint64_t value)
 
 ASTNode ManagerImpl::bv_const_bits(std::uint32_t width, const std::string& bits)
 {
-  return bm->CreateBVConst(bits, 2, static_cast<int>(width));
+  return bm->CreateBVConst(bits, 2, width);
 }
 
 ASTNode ManagerImpl::fp_const_from_bits(std::uint32_t e, std::uint32_t s,
