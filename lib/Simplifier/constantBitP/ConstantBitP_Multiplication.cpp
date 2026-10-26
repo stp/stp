@@ -1358,16 +1358,16 @@ Result smallDomainPass(FixedBits& x, FixedBits& y, FixedBits& output,
     return NO_CHANGE;
 
   // Positions of the unfixed bits, x's first.
-  unsigned char pos[MAX_BITS_LIMIT];
+  unsigned pos[MAX_BITS_LIMIT];
   unsigned nx = 0, k = 0;
   for (unsigned i = 0; i < width; i++)
     if (!x.isFixed(i))
-      pos[k++] = (unsigned char)i;
+      pos[k++] = i;
   nx = k;
   if (!aliased)
     for (unsigned i = 0; i < width; i++)
       if (!y.isFixed(i))
-        pos[k++] = (unsigned char)i;
+        pos[k++] = i;
   assert(k == unfixed);
 
   const unsigned INLINE_WORDS = 8;
