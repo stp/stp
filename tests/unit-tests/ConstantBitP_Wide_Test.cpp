@@ -580,6 +580,61 @@ TEST_F(ConstantBitP_Wide, Multiplication)
   checkBinary("bvmul", stp::BVMULT, prop, OVERAPPROXIMATES);
 }
 
+// Bit positions above 255. The bounded enumeration once kept the unfixed
+// positions in bytes, so bit `hi` was walked as bit `hi - 256` and never
+// took the value one. Here x is free only at `lo = hi - 256` and at `hi`,
+// y is 1 or 3, and bit `hi` of the product is x's bit `hi`, fixed to one.
+TEST_F(ConstantBitP_Wide, MultiplicationAboveBit255)
+{
+  for (const unsigned width : {257u, 300u, 513u})
+  {
+    const unsigned hi = width - 1, lo = hi - 256;
+    FixedBits x(width, false), y(width, false), out(width, false);
+    for (unsigned i = 0; i < width; i++)
+    {
+      if (i != lo && i != hi)
+      {
+        x.setFixed(i, true);
+        x.setValue(i, false);
+      }
+      if (i != 1)
+      {
+        y.setFixed(i, true);
+        y.setValue(i, i == 0);
+      }
+    }
+    out.setFixed(hi, true);
+    out.setValue(hi, true);
+
+    std::vector<FixedBits*> children = {&x, &y};
+    const Result r = bvMultiplyBothWays(children, out, &mgr, NULL);
+    ASSERT_NE(CONFLICT, r) << "width " << width;
+
+    // Every solution: x = 2^hi + {0, 2^lo}, y = {1, 3}.
+    for (const bool xLo : {false, true})
+      for (const bool y1 : {false, true})
+      {
+        stp::CBV xv = CONSTANTBV::BitVector_Create(width, true);
+        stp::CBV yv = CONSTANTBV::BitVector_Create(width, true);
+        CONSTANTBV::BitVector_Bit_On(xv, hi);
+        if (xLo)
+          CONSTANTBV::BitVector_Bit_On(xv, lo);
+        CONSTANTBV::BitVector_Bit_On(yv, 0);
+        if (y1)
+          CONSTANTBV::BitVector_Bit_On(yv, 1);
+        stp::CBV ov = evalOp(&mgr, stp::BVMULT, width, false,
+                             {FixedBits(width, false), FixedBits(width, false)},
+                             {xv, yv});
+        EXPECT_TRUE(admits(x, xv) && admits(y, yv) && admits(out, ov))
+            << "width " << width << " x[lo]=" << xLo << " y[1]=" << y1
+            << ": " << str(x) << " * " << str(y) << " = " << str(out);
+        CONSTANTBV::BitVector_Destroy(xv);
+        CONSTANTBV::BitVector_Destroy(yv);
+        CONSTANTBV::BitVector_Destroy(ov);
+      }
+  }
+}
+
 TEST_F(ConstantBitP_Wide, UnsignedDivision)
 {
   const Propagator div = [this](std::vector<FixedBits*>& c, FixedBits& o) {
