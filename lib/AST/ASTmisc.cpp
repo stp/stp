@@ -1100,7 +1100,9 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       checkChildrenAreBV(v, n);
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-      if (n.GetValueWidth() != n[0].GetValueWidth() + n[1].GetValueWidth())
+      // In 64 bits: a sum past 2^32 - 1 would wrap to a width that matches.
+      if (n.GetValueWidth() !=
+          uint64_t(n[0].GetValueWidth()) + n[1].GetValueWidth())
         FatalError("BVTypeCheck:BVCONCAT: lengths do not add up\n", n);
       break;
 
@@ -1119,8 +1121,11 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
       if (!(BVCONST == n[1].GetKind() && BVCONST == n[2].GetKind()))
         FatalError("BVTypeCheck: indices should be BVCONST\n", n);
+      if (n[1].GetUnsignedConst() < n[2].GetUnsignedConst())
+        FatalError("BVTypeCheck: extract's top index is below its bottom\n",
+                   n);
       if (n.GetValueWidth() !=
-          n[1].GetUnsignedConst() - n[2].GetUnsignedConst() + 1)
+          uint64_t(n[1].GetUnsignedConst()) - n[2].GetUnsignedConst() + 1)
         FatalError("BVTypeCheck: length mismatch\n", n);
       if (n[1].GetUnsignedConst() >= n[0].GetValueWidth())
         FatalError("BVTypeCheck: Top index of select is greater or equal to "

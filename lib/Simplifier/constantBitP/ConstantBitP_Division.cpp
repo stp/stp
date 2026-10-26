@@ -605,6 +605,9 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   assert(output.getWidth() == children[1]->getWidth());
   assert(children.size() == 2);
 
+  // The widened copies are 2w bits, and a width is 32 bits.
+  if (output.getWidth() > UINT32_MAX / 2)
+    return NO_CHANGE;
   unsigned int newWidth = 2 * output.getWidth();
   // Create Widenend copies.
   FixedBits a(newWidth, false);

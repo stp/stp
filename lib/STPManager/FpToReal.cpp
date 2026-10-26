@@ -510,7 +510,7 @@ public:
     if (!rationalToPackedFPBits(numerator, c.GetRealDenominator(), negative,
                                 eb, sb, mode, bits, err))
       return ASTNode();
-    return bm_.CreateFPConst(bm_.CreateBVConst(bits, 2, (int)(eb + sb)), eb,
+    return bm_.CreateFPConst(bm_.CreateBVConst(bits, 2, eb + sb), eb,
                              sb);
   }
 

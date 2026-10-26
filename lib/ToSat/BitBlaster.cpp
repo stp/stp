@@ -10525,6 +10525,11 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
     case BVUMULO:
     case BVSMULO:
     {
+      // The products below are up to 2w bits wide, and a width is 32 bits.
+      if (w > UINT32_MAX / 2)
+        FatalError("BitBlaster: overflow-predicate operands too wide to "
+                   "multiply exactly",
+                   form);
       if (k == BVUMULO && uf->umulo_schulte)
       {
         // a*b >= 2^w whenever bits i of a and j of b are both set with

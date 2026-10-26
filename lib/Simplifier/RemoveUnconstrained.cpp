@@ -2129,11 +2129,11 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         const unsigned low = children[2].GetUnsignedConst();
         assert(high >= low);
 
-        const int rhsSize = low;
-        const int lhsSize = operandWidth - high - 1;
+        const unsigned rhsSize = low;
+        const unsigned lhsSize = operandWidth - high - 1;
 
         ASTNode current = v;
-        int newWidth = v.GetValueWidth();
+        unsigned newWidth = v.GetValueWidth();
 
         if (lhsSize > 0)
         {
@@ -2151,7 +2151,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           newWidth += rhsSize;
         }
 
-        assert(newWidth == (int)operandWidth);
+        assert(newWidth == operandWidth);
         replace(var, current);
       }
       break;
