@@ -258,7 +258,8 @@ jobs:
     # this leg clones below. This is the leg that can check they stay apart:
     # it is the only one with a static CryptoMiniSat in deps/install, which is
     # exactly the prefix the bundled copy lands in. Both properties below are
-    # settled during configure, so neither costs a build.
+    # settled during configure, so neither costs a build; which header the
+    # objects read costs building two object libraries, sat and stpmgr.
     #
     # Left unchecked, the two failure modes are a silent wrong answer and a
     # misattributed one: the first linked CryptoMiniSat's 2.1.3 library into a
@@ -294,6 +295,21 @@ jobs:
         echo "CADICAL_LIBRARY=$picked"
         if [ "$picked" != "$alongside/build/libcadical.a" ]; then
           echo "::error::CADICAL_LIBRARY resolved to '$picked', not the CADICAL_DIR copy"
+          exit 1
+        fi
+
+        # And the header has to outrank it too, in every object that reads
+        # cadical/cadical.hpp: only the CADICAL_DIR copy staged in the build
+        # tree will do. STP.cpp once included it from outside lib/Sat, whose
+        # include path does not carry that copy, and so compiled against the
+        # CaDiCaL in deps/install -- or, with none there, did not compile.
+        cmake --build build-cadical-pick --target sat stpmgr
+        ninja -C build-cadical-pick -t deps |
+          awk '/^[^ ]/ { obj = $1 } /\/cadical\/cadical\.hpp$/ { print obj, $1 }' |
+          tee build-cadical-pick/cadical-reads.txt
+        if ! grep -q . build-cadical-pick/cadical-reads.txt ||
+           grep -v '/deps/staged-include/cadical/cadical\.hpp$' build-cadical-pick/cadical-reads.txt; then
+          echo "::error::an object read a cadical/cadical.hpp other than the CADICAL_DIR copy"
           exit 1
         fi
 
