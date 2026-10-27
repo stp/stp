@@ -66,6 +66,12 @@ message(STATUS "Python 3.x API: Cython ${_stp_py_cython_version} via ${PYTHON_EX
 # The development files of the interpreter the rest of the build already
 # chose (Python3_EXECUTABLE is set from PYTHON_EXECUTABLE at the top level).
 set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+# A Windows extension links the interpreter's import library, which python.org
+# ships as libs/python3XY.lib. A static build narrows library lookup to .a
+# archives (see the top level), and would not find it.
+if(WIN32)
+    list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES .lib)
+endif()
 find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
 
 # lib/Api/CMakeLists.txt publishes STP_API_GEN_DIR into lib/ only; the
