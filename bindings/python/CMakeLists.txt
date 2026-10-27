@@ -118,6 +118,13 @@ if(WIN32 AND NOT MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8
    AND Python3_VERSION VERSION_LESS 3.12)
     target_compile_definitions(stp_py_core PRIVATE MS_WIN64=)
 endif()
+# A static build links the extension statically too, as it does the stp
+# executable. Under MinGW it would otherwise need the libstdc++, libgcc_s and
+# winpthread DLLs, and Python looks for an extension's DLLs beside it and in
+# System32, not on PATH.
+if(MINGW AND NOT BUILD_SHARED_LIBS)
+    target_link_options(stp_py_core PRIVATE -static)
+endif()
 
 # --- the package ------------------------------------------------------------
 set(STP_PY_MODULES
