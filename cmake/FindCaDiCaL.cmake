@@ -42,8 +42,9 @@ set(CADICAL_VERSION "unknown")
 # `stp` branch is CaDiCaL 3.0.1 with the changes STP needs on it as commits --
 # generated cubes in external literal numbering, a witness-marked variable
 # restored when it becomes observed, decision polarity advice, clause import
-# and search diversification -- and a CMake build of the library. Its
-# `stp-2.1.3` branch is the same build, and the witness fix, on 2.1.3.
+# and search diversification -- and a CMake build of the library, which
+# keeps GCC's bitfield layout under MinGW. Its `stp-2.1.3` branch is the same
+# build, and the witness fix, on 2.1.3.
 #
 # The version is kept separate from the source revision, because the feature
 # gates below are decided from a release number rather than a hash. Naming a
@@ -69,7 +70,7 @@ macro(_stp_cadical_default var value doc)
     endif()
     set(_STP_${var}_DEFAULT "${value}" CACHE INTERNAL "")
 endmacro()
-_stp_cadical_default(CaDiCaL_TAG "84e8dbb00ff7995be70457322d6255d31d8da289"
+_stp_cadical_default(CaDiCaL_TAG "a86f08a4e39aeed296f3b0f4beed3a7f8c1c3a43"
     "Commit (or tag) of stp/cadical to build when one has to be built")
 _stp_cadical_default(CaDiCaL_VERSION "3.0.1"
     "Release version of the CaDiCaL that CaDiCaL_TAG names")
