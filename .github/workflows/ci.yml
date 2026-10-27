@@ -2232,4 +2232,95 @@ jobs:
         cmake --build consumer
         ctest --test-dir consumer --output-on-failure
 
+  # The Python package on Windows: built with MinGW, as the job above builds
+  # STP, for a python.org CPython, which is an MSVC build. 3.11 because its
+  # pyconfig.h still defines MS_WIN64 for MSVC alone. The extension is linked
+  # statically, and the suite runs with nothing from MSYS2 able to supply a
+  # DLL: Python does not search PATH for an extension's.
+  build-windows-python:
+    name: windows (python, MinGW)
+    runs-on: windows-2025
+
+    env:
+      # As in the job above.
+      ABC_USE_NO_PTHREADS: 1
+      ABC_USE_STDINT_H: 1
+      SCCACHE_GHA_ENABLED: 'true'
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - uses: mozilla-actions/sccache-action@v0.0.11
+
+    # As in the job above.
+    - name: Locate sccache
+      shell: pwsh
+      run: |
+        $exe = $env:SCCACHE_PATH
+        if (-not $exe.EndsWith('.exe')) { $exe = "$exe.exe" }
+        if (-not (Test-Path $exe)) { throw "sccache is not at $exe" }
+        & $exe --version
+        if ($LASTEXITCODE -ne 0) { throw "sccache failed to run" }
+        "SCCACHE=$($exe -replace '\\', '/')" |
+          Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.11'
+
+    - name: Python packages
+      shell: pwsh
+      run: |
+        python -m pip install --quiet cython pytest
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: false
+        install: >-
+          bison
+          flex
+          git
+          make
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-ninja
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_KISSAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(cygpath -m "$pythonLocation")/python.exe" -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+
+    - name: Build
+      run: |
+        "$SCCACHE" --zero-stats
+        cmake --build build --target stp_python --parallel "$(nproc)"
+        "$SCCACHE" --show-stats
+
+    - name: Keep the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ep-logs-${{ github.job }}
+        path: |
+          build/deps/src/*-stamp/*.log
+        if-no-files-found: ignore
+
+    # Under pwsh, so that nothing of MSYS2 is on PATH either.
+    - name: Python API tests
+      shell: pwsh
+      working-directory: tests/api/python
+      env:
+        PYTHONPATH: ${{ github.workspace }}/build/bindings/python
+        PYTHONDONTWRITEBYTECODE: 1
+      run: |
+        python -c "import stp; print(stp.version(), stp.sat_backends())"
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        python -m pytest -q -rs -p no:cacheprovider .
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
 # EOF
