@@ -110,6 +110,14 @@ if(NOT MSVC)
     # Cython's generated C is not this project's code: keep its warnings quiet.
     target_compile_options(stp_py_core PRIVATE -w)
 endif()
+# Before 3.12, a Windows pyconfig.h defines MS_WIN64 only for MSVC
+# (python/cpython#100137). Without it any other compiler sees a 64-bit
+# interpreter as a 32-bit one, and the generated module stops at Cython's
+# SIZEOF_VOID_P check. Meson's Python dependency defines it the same way.
+if(WIN32 AND NOT MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8
+   AND Python3_VERSION VERSION_LESS 3.12)
+    target_compile_definitions(stp_py_core PRIVATE MS_WIN64=)
+endif()
 
 # --- the package ------------------------------------------------------------
 set(STP_PY_MODULES
