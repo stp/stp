@@ -41,9 +41,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 
 #include "stp/Sat/SATSolverFactory.h"
-#ifdef USE_CADICAL
-#include "stp/Sat/Cadical.h"
-#endif
 #include "Lra/LraAtomRegistry.h"
 #include "Lra/LraBudgetRefusal.h"
 #include "Lra/LraFrontend.h"
@@ -892,12 +889,9 @@ bool lraGaveUpOnABudget(const std::exception& thrown)
 // tried with it.
 bool hostsUFSearch(SATSolver& solver, const UserDefinedFlags& flags)
 {
-#ifdef USE_CADICAL
-  if (dynamic_cast<Cadical*>(&solver) != NULL)
-    return true;
-#endif
-  return flags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER &&
-         solver.supportsTheoryPropagator();
+  return flags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER ||
+         (flags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER &&
+          solver.supportsTheoryPropagator());
 }
 } // namespace
 
