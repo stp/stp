@@ -39,6 +39,17 @@ import stp
 from stp import _core
 
 
+def send_sigint_to_self():
+    """SIGINT to this process, as Ctrl-C sends it. Windows' os.kill() terminates the process for
+    any signal but its two console events, so there raise() delivers it to the C runtime's
+    handler instead. POSIX keeps os.kill(): raise() would aim at the calling thread rather than
+    the process."""
+    if sys.platform == "win32":
+        signal.raise_signal(signal.SIGINT)
+    else:
+        os.kill(os.getpid(), signal.SIGINT)
+
+
 @pytest.mark.mid_search
 def test_interrupt_from_another_thread(hard):
     fired = []
@@ -78,7 +89,7 @@ def test_sigint_on_main_thread(hard):
 
     def kill():
         time.sleep(0.4)
-        os.kill(os.getpid(), signal.SIGINT)
+        send_sigint_to_self()
 
     t = threading.Thread(target=kill)
     t.start()
@@ -144,7 +155,7 @@ def test_the_sigint_bridge_puts_the_handler_back_as_it_was(hard):
 
     def kill():
         time.sleep(0.3)
-        os.kill(os.getpid(), signal.SIGINT)
+        send_sigint_to_self()
         time.sleep(3.0)
         os.write(w, b"x")  # unblocks the read if the signal did not
 
@@ -165,7 +176,7 @@ def test_a_process_that_ignores_sigint_is_not_interrupted(hard):
     try:
         def kill():
             time.sleep(0.3)
-            os.kill(os.getpid(), signal.SIGINT)
+            send_sigint_to_self()
 
         t = threading.Thread(target=kill)
         t.start()
