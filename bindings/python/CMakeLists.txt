@@ -66,6 +66,12 @@ message(STATUS "Python 3.x API: Cython ${_stp_py_cython_version} via ${PYTHON_EX
 # The development files of the interpreter the rest of the build already
 # chose (Python3_EXECUTABLE is set from PYTHON_EXECUTABLE at the top level).
 set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+# A Windows extension links the interpreter's import library, which python.org
+# ships as libs/python3XY.lib. A static build narrows library lookup to .a
+# archives (see the top level), and would not find it.
+if(WIN32)
+    list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES .lib)
+endif()
 find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
 
 # lib/Api/CMakeLists.txt publishes STP_API_GEN_DIR into lib/ only; the
@@ -103,6 +109,21 @@ target_include_directories(stp_py_core PRIVATE ${STP_PY_SOURCE_DIR})
 if(NOT MSVC)
     # Cython's generated C is not this project's code: keep its warnings quiet.
     target_compile_options(stp_py_core PRIVATE -w)
+endif()
+# Before 3.12, a Windows pyconfig.h defines MS_WIN64 only for MSVC
+# (python/cpython#100137). Without it any other compiler sees a 64-bit
+# interpreter as a 32-bit one, and the generated module stops at Cython's
+# SIZEOF_VOID_P check. Meson's Python dependency defines it the same way.
+if(WIN32 AND NOT MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8
+   AND Python3_VERSION VERSION_LESS 3.12)
+    target_compile_definitions(stp_py_core PRIVATE MS_WIN64=)
+endif()
+# A static build links the extension statically too, as it does the stp
+# executable. Under MinGW it would otherwise need the libstdc++, libgcc_s and
+# winpthread DLLs, and Python looks for an extension's DLLs beside it and in
+# System32, not on PATH.
+if(MINGW AND NOT BUILD_SHARED_LIBS)
+    target_link_options(stp_py_core PRIVATE -static)
 endif()
 
 # --- the package ------------------------------------------------------------

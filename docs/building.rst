@@ -901,6 +901,13 @@ fork's CMake build, which compiles the library alone and keeps GCC's
 bitfield layout. MinGW's default is MSVC's, under which Kissat corrupts
 its watch lists and CaDiCaL's clauses grow by 8 bytes each.
 
+The Python package builds here too, for a python.org interpreter (which
+is an MSVC build): add ``-DENABLE_PYTHON_API=ON`` and point
+``PYTHON_EXECUTABLE`` at its ``python.exe``, with Cython installed for it.
+In a static build the extension is linked statically as well, so it needs
+no MinGW DLL at import; Python does not look for an extension's DLLs on
+``PATH``.
+
 Common to both
 ~~~~~~~~~~~~~~
 
