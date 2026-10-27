@@ -25,6 +25,20 @@ THE SOFTWARE.
 #include <set>
 #include <string>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphRulePasses.h"
+// The graph pass takes only the manager; the cases pass a factory too.
+struct CommonFactorImpl : stp::GraphCommonFactor
+{
+  CommonFactorImpl(stp::STPMgr* mgr, NodeFactory*) : stp::GraphCommonFactor(mgr) {}
+};
+#else
+typedef stp::CommonFactor CommonFactorImpl;
+#endif
+
+
   const std::string start_input = R"(
   (set-logic QF_BV)
   (set-info :smt-lib-version 2.0)
@@ -70,7 +84,7 @@ struct Context
   {
     ASTNode n = parse(input);
     std::cerr << "Pre common factor " << n;
-    stp::CommonFactor pass(&mgr, &snf);
+    CommonFactorImpl pass(&mgr, &snf);
     n = pass.topLevel(n);
     saved = pass.multipliesSaved();
     std::cerr << "Post common factor " << n;
@@ -274,7 +288,7 @@ TEST(CommonFactor_Test, products_sharing_nothing_are_unchanged)
 
   Context ctx;
   ASTNode before = ctx.parse(input);
-  stp::CommonFactor pass(&ctx.mgr, &ctx.snf);
+  CommonFactorImpl pass(&ctx.mgr, &ctx.snf);
   ASTNode after = pass.topLevel(before);
 
   ASSERT_EQ(pass.multipliesSaved(), 0);
@@ -309,7 +323,7 @@ TEST(CommonFactor_Test, running_twice_changes_nothing)
   Context ctx;
   ASTNode once = ctx.process(input);
 
-  stp::CommonFactor again(&ctx.mgr, &ctx.snf);
+  CommonFactorImpl again(&ctx.mgr, &ctx.snf);
   ASTNode twice = again.topLevel(once);
 
   ASSERT_EQ(again.multipliesSaved(), 0);

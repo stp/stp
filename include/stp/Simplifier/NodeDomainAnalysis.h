@@ -176,6 +176,20 @@ public:
 
   DomainInfo buildMap(const ASTNode& n);
 
+  // For a node edited in place (a MutableGraph node whose children were
+  // patched): take() hands the caller its memoised entries (nulls when
+  // absent; the keys stay mapped), recompute() builds them again from
+  // the children and overwrites in place, and the caller compares and
+  // releases the old ones. Nothing is erased: a dense map's erase is the
+  // expensive operation.
+  DomainInfo take(const ASTNode& n);
+  DomainInfo recompute(const ASTNode& n);
+  static bool same(const DomainInfo& a, const DomainInfo& b);
+  static void release(DomainInfo& d);
+  // Drop every entry keyed by a MutableGraph node: the graph is gone and
+  // the keys would otherwise keep its nodes alive for the run.
+  void forgetMutable();
+
   // buildMap reaches a node's children by calling itself, so a deeply nested
   // input exhausts the stack. Once the shallow recursion budget above is
   // exhausted, fill the remaining maps from the bottom up, and those calls

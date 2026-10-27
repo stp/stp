@@ -24,6 +24,19 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include <stdio.h>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphRulePasses.h"
+struct MergeSameImpl : stp::GraphMergeSame
+{
+  MergeSameImpl(stp::STPMgr* mgr, NodeFactory*) : stp::GraphMergeSame(mgr) {}
+};
+#else
+typedef stp::MergeSame MergeSameImpl;
+#endif
+
+
 
   const std::string start_input = R"(
   (set-logic QF_BV)
@@ -51,7 +64,7 @@ struct Context
    stp::STPMgr mgr;
    SimplifyingNodeFactory snf;
    stp::Cpp_interface interface;
-   stp::MergeSame ms;
+   MergeSameImpl ms;
 
    Context() :
    snf (*(mgr.hashingNodeFactory), mgr),

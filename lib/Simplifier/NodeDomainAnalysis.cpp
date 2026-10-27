@@ -546,10 +546,10 @@ namespace stp
       ||(n.GetKind() == BVSX && nullChildZero)
       ||(n.GetKind() == SYMBOL))
     {
-      toFixedBits.insert({n, nullptr});
-      toIntervals.insert({n, nullptr});
-      toIntervalSets.insert({n, nullptr});
-      toValueSets.insert({n, nullptr});
+      toFixedBits.insert_or_assign(n, nullptr);
+      toIntervals.insert_or_assign(n, nullptr);
+      toIntervalSets.insert_or_assign(n, nullptr);
+      toValueSets.insert_or_assign(n, nullptr);
 
       return {nullptr, nullptr, nullptr, nullptr};
     }
@@ -655,10 +655,11 @@ namespace stp
       result_intervalSet->intersectInterval(result_interval->minV,
                                             result_interval->maxV);
 
-    toFixedBits.insert({n, result_bits});
-    toIntervals.insert({n, result_interval});
-    toIntervalSets.insert({n, result_intervalSet});
-    toValueSets.insert({n, result_set});
+    // Assigned, not inserted: a recompute (see take) overwrites in place.
+    toFixedBits.insert_or_assign(n, result_bits);
+    toIntervals.insert_or_assign(n, result_interval);
+    toIntervalSets.insert_or_assign(n, result_intervalSet);
+    toValueSets.insert_or_assign(n, result_set);
 
     if (n.isConstant())
     {
@@ -701,4 +702,124 @@ namespace stp
       valueSetAnalysis.stats();
     }
   }
+
+  NodeDomainAnalysis::DomainInfo NodeDomainAnalysis::take(const ASTNode& n)
+  {
+    DomainInfo d{nullptr, nullptr, nullptr, nullptr};
+    auto it = toFixedBits.find(n);
+    if (it == toFixedBits.end())
+      return d;
+    d.bits = it->second;
+    auto it0 = toIntervals.find(n);
+    if (it0 != toIntervals.end())
+      d.interval = it0->second;
+    auto itIS = toIntervalSets.find(n);
+    if (itIS != toIntervalSets.end())
+      d.intervalSet = itIS->second;
+    auto it1 = toValueSets.find(n);
+    if (it1 != toValueSets.end())
+      d.set = it1->second;
+    return d;
+  }
+
+  NodeDomainAnalysis::DomainInfo NodeDomainAnalysis::recompute(const ASTNode& n)
+  {
+    return buildMap(n, true);
+  }
+
+  static bool sameInterval(const UnsignedInterval* a, const UnsignedInterval* b)
+  {
+    if (a == nullptr || b == nullptr)
+      return a == b;
+    return CONSTANTBV::BitVector_equal(a->minV, b->minV) &&
+           CONSTANTBV::BitVector_equal(a->maxV, b->maxV);
+  }
+
+  bool NodeDomainAnalysis::same(const DomainInfo& a, const DomainInfo& b)
+  {
+    if ((a.bits == nullptr) != (b.bits == nullptr))
+      return false;
+    if (a.bits != nullptr && !FixedBits::equals(*a.bits, *b.bits))
+      return false;
+    if (!sameInterval(a.interval, b.interval))
+      return false;
+    if ((a.intervalSet == nullptr) != (b.intervalSet == nullptr))
+      return false;
+    if (a.intervalSet != nullptr)
+    {
+      if (a.intervalSet->parts.size() != b.intervalSet->parts.size())
+        return false;
+      for (size_t i = 0; i < a.intervalSet->parts.size(); i++)
+        if (!sameInterval(a.intervalSet->parts[i], b.intervalSet->parts[i]))
+          return false;
+    }
+    if ((a.set == nullptr) != (b.set == nullptr))
+      return false;
+    if (a.set != nullptr)
+    {
+      if (a.set->values.size() != b.set->values.size())
+        return false;
+      for (size_t i = 0; i < a.set->values.size(); i++)
+        if (!CONSTANTBV::BitVector_equal(a.set->values[i], b.set->values[i]))
+          return false;
+    }
+    return true;
+  }
+
+  void NodeDomainAnalysis::release(DomainInfo& d)
+  {
+    delete d.bits;
+    delete d.interval;
+    delete d.intervalSet;
+    delete d.set;
+    d = DomainInfo{nullptr, nullptr, nullptr, nullptr};
+  }
+
+  void NodeDomainAnalysis::forgetMutable()
+  {
+    // Rebuilt rather than erased entry by entry: a dense map's erase
+    // re-finds the moved element's bucket, and a round leaves millions of
+    // such keys.
+    NodeToFixedBitsMap bits;
+    NodeToUnsignedIntervalMap intervals;
+    NodeToUnsignedIntervalSetMap intervalSets;
+    NodeToValueSetMap sets;
+    bits.reserve(toFixedBits.size());
+    intervals.reserve(toIntervals.size());
+    intervalSets.reserve(toIntervalSets.size());
+    sets.reserve(toValueSets.size());
+    for (auto& e : toFixedBits)
+    {
+      if (e.first.isMutableInterior())
+        delete e.second;
+      else
+        bits.insert(e);
+    }
+    for (auto& e : toIntervals)
+    {
+      if (e.first.isMutableInterior())
+        delete e.second;
+      else
+        intervals.insert(e);
+    }
+    for (auto& e : toIntervalSets)
+    {
+      if (e.first.isMutableInterior())
+        delete e.second;
+      else
+        intervalSets.insert(e);
+    }
+    for (auto& e : toValueSets)
+    {
+      if (e.first.isMutableInterior())
+        delete e.second;
+      else
+        sets.insert(e);
+    }
+    toFixedBits.swap(bits);
+    toIntervals.swap(intervals);
+    toIntervalSets.swap(intervalSets);
+    toValueSets.swap(sets);
+  }
+
 }
