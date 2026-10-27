@@ -816,7 +816,7 @@ for itself: start from an *x64 Native Tools* developer prompt, or enter
 the developer shell first.
 
 The two CI jobs -- ``windows (minisat, MSVC)`` and
-``windows (cadical, MinGW)`` in
+``windows (cadical, kissat, MinGW)`` in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
 -- do exactly what is below, and are the reference if a detail here is
 not enough.
@@ -886,7 +886,7 @@ From a UCRT64 shell:
     cmake -B build -G Ninja \
         -DENABLE_AUTO_DOWNLOAD=ON \
         -DSTATICCOMPILE=ON \
-        -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=OFF \
+        -DUSE_CADICAL=ON -DUSE_KISSAT=ON -DUSE_CRYPTOMINISAT=OFF \
         .
     cmake --build build --parallel "$(nproc)"
 
@@ -896,9 +896,10 @@ that is 32 bits wide under LLP64, and the pointer casts in its headers
 then do not compile; the variable routes them onto ``stdint.h`` instead.
 ``ABC_USE_NO_PTHREADS`` is as above.
 
-CaDiCaL needs nothing extra here: ``cmake/FindCaDiCaL.cmake`` drives its
-configure script and builds the library alone, which is what this
-toolchain needs it to do.
+CaDiCaL and Kissat need nothing extra here: each is built through its
+fork's CMake build, which compiles the library alone and keeps GCC's
+bitfield layout. MinGW's default is MSVC's, under which Kissat corrupts
+its watch lists and CaDiCaL's clauses grow by 8 bytes each.
 
 Common to both
 ~~~~~~~~~~~~~~
