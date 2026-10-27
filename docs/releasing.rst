@@ -199,10 +199,10 @@ No Windows binary, though CI builds two and 2.3.3 shipped one. MSVC compiles
 neither CryptoMiniSat nor CaDiCaL, both of which use POSIX-only code, so
 ``windows (minisat, MSVC)`` is left with MiniSat as its only backend -- slow
 enough that shipping it would misrepresent what STP does. ``windows
-(cadical, MinGW)`` no longer has that problem: it builds CaDiCaL under
-MinGW/UCRT64 and links a fully static ``stp.exe`` against it, so publishing
-that one is now a question of wiring it into the release workflow rather
-than of getting a competitive solver to build.
+(cadical, kissat, MinGW)`` no longer has that problem: it builds CaDiCaL and
+Kissat under MinGW/UCRT64 and links a fully static ``stp.exe`` against them,
+so publishing that one is now a question of wiring it into the release
+workflow rather than of getting a competitive solver to build.
 
 No other architectures either, though adding a Linux one is about ten
 lines: copy the ``linux-amd64`` job, change ``runs-on`` to

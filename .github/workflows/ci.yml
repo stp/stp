@@ -2077,12 +2077,11 @@ jobs:
         ctest --test-dir consumer --output-on-failure
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
-  # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
-  # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
-  # the MSYS2 UCRT64 toolchain: the Windows counterpart of the Linux cadical
-  # job, and CaDiCaL-only backend-wise.
+  # CaDiCaL and Kissat on Windows. MSVC cannot compile either, but both build
+  # with MinGW, so this leg compiles them and STP with the MSYS2 UCRT64
+  # toolchain: the Windows counterpart of the Linux cadical and kissat jobs.
   build-windows-cadical:
-    name: windows (cadical, MinGW)
+    name: windows (cadical, kissat, MinGW)
     runs-on: windows-2025
 
     env:
@@ -2150,27 +2149,25 @@ jobs:
           mingw-w64-ucrt-x86_64-ninja
 
     # CaDiCaL and LibBF used to be built by hand here, each with flags this
-    # toolchain needs and the setup scripts did not have. Both are now the
-    # build's own job: cmake/FindCaDiCaL.cmake drives CaDiCaL's configure
-    # script and builds libcadical.a alone -- which is what the hand-written
-    # step was for, since CaDiCaL's default target also builds mobical, and
-    # mobical does not compile on MinGW -- and cmake/FindLibBF.cmake gives
-    # LibBF a CMakeLists, so the UCRT64 gcc compiles it like everything else.
+    # toolchain needs and the setup scripts did not have. They, and Kissat,
+    # are now the build's own job: the CaDiCaL and Kissat forks each carry a
+    # CMake build of the library alone -- CaDiCaL's default target also
+    # builds mobical, which does not compile on MinGW -- that keeps GCC's
+    # bitfield layout, and cmake/FindLibBF.cmake gives LibBF a CMakeLists, so
+    # the UCRT64 gcc compiles it like everything else.
 
     - name: Configure
-      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_INSTALL_PREFIX:PATH="$(cygpath -m "$GITHUB_WORKSPACE")/install" .
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_KISSAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_INSTALL_PREFIX:PATH="$(cygpath -m "$GITHUB_WORKSPACE")/install" .
 
-    # CaDiCaL above is built by its own makefile and so is not cached; ABC and
-    # STP are, which is the bulk of this step. The stats are printed so a run
-    # that quietly stops hitting is visible rather than just slow.
+    # Everything compiled here goes through sccache, the dependencies too:
+    # ExternalProject hands them the launcher. ABC and STP are the bulk of
+    # it. The stats are printed so a run that quietly stops hitting is
+    # visible rather than just slow.
     - name: Build
       run: |
         "$SCCACHE" --zero-stats
         cmake --build build --parallel "$(nproc)"
         "$SCCACHE" --show-stats
-
-    # The first query is answered during simplification; the second cannot
-    # be, so it exercises bitblasting, ABC's CNF generation and CaDiCaL.
 
     # ExternalProject logs each step to a file and prints only a truncated tail
     # when one fails, so a dependency that emits many warnings hides its own
@@ -2189,32 +2186,40 @@ jobs:
         stp=$(find build -name 'stp.exe' | head -1)
         echo "binary: $stp"
         test -n "$stp"
+        # The first query is answered during simplification; the second cannot
+        # be, so it exercises bitblasting, ABC's CNF generation and the SAT
+        # backend.
         echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > test.smt2
-        out=$("$stp" test.smt2)
-        echo "output: '$out'"
-        [ "$out" = "sat" ]
         echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > testsat.smt2
-        out=$("$stp" testsat.smt2)
-        echo "sat-backend output: '$out'"
-        [ "$out" = "sat" ]
         # Real-literal folding through LibBF as MinGW compiled it: the decimal
         # fold must equal its packed-bits spelling.
         echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > testlit.smt2
-        out=$("$stp" testlit.smt2)
-        echo "real-literal output: '$out'"
-        [ "$out" = "unsat" ]
         # Linear real arithmetic through IMath and the exact simplex as MinGW
         # compiled them: the constants are wider than the 128-bit lane, so
         # every pivot and the model's exact value go through IMath.
         echo '(set-logic QF_LRA)(set-option :produce-models true)(declare-fun x () Real)(declare-fun y () Real)(assert (= (+ x y) 1000000000000000000000000000000000000000001))(assert (= (- x y) 2))(check-sat)(get-value (x))' > testlra.smt2
-        out=$("$stp" testlra.smt2)
-        echo "lra output: '$out'"
-        [ "$(echo "$out" | head -1)" = "sat" ]
-        echo "$out" | grep -qF '(x (/ 1000000000000000000000000000000000000000003 2))'
         echo '(set-logic QF_LRA)(declare-fun x () Real)(declare-fun y () Real)(assert (> (+ x y) 1000000000000000000000000000000000000000001))(assert (< (* 3 x) 1000000000000000000000000000000000000000001))(assert (< (* 3 y) 1000000000000000000000000000000000000000001))(check-sat)' > testlrau.smt2
-        out=$("$stp" testlrau.smt2)
-        echo "lra refutation output: '$out'"
-        [ "$out" = "unsat" ]
+        # Every query on each backend. Built with MinGW's default bitfield
+        # layout, Kissat corrupted its watch lists, and stp --kissat crashed on
+        # testsat.smt2 and testlra.smt2.
+        for backend in --cadical --kissat; do
+          out=$("$stp" "$backend" test.smt2)
+          echo "$backend output: '$out'"
+          [ "$out" = "sat" ]
+          out=$("$stp" "$backend" testsat.smt2)
+          echo "$backend sat-backend output: '$out'"
+          [ "$out" = "sat" ]
+          out=$("$stp" "$backend" testlit.smt2)
+          echo "$backend real-literal output: '$out'"
+          [ "$out" = "unsat" ]
+          out=$("$stp" "$backend" testlra.smt2)
+          echo "$backend lra output: '$out'"
+          [ "$(echo "$out" | head -1)" = "sat" ]
+          echo "$out" | grep -qF '(x (/ 1000000000000000000000000000000000000000003 2))'
+          out=$("$stp" "$backend" testlrau.smt2)
+          echo "$backend lra refutation output: '$out'"
+          [ "$out" = "unsat" ]
+        done
 
     # As in the MSVC job: programs against the installed package, built with
     # the same compiler, the threaded one included.
