@@ -270,15 +270,20 @@ jobs:
       run: |
         # Cloned here rather than through the build's own CaDiCaL: the point
         # of this leg is that there are two distinct CaDiCaLs about, and one
-        # of them has to be somewhere the build did not put it.
+        # of them has to be somewhere the build did not put it. This one is
+        # the 3.0.1 release itself, the commit stp/cadical's `stp` branch
+        # starts from, so it carries none of STP's changes and the configure
+        # probes find a CaDiCaL other than the pinned one.
         #
         # Outside deps/, which the dependency cache saves at the end of the
         # job: a clone there went into the cache on a miss, and every later
         # run that hit that entry failed here with "destination path
         # 'deps/cadical' already exists".
         alongside="$RUNNER_TEMP/cadical-alongside"
-        git clone --depth 1 --branch rel-3.0.1 \
-          https://github.com/arminbiere/cadical "$alongside"
+        git init -q "$alongside"
+        git -C "$alongside" fetch -q --depth 1 https://github.com/stp/cadical \
+          c60730422e758ef1cebe7aeddf2dda31c996bf04
+        git -C "$alongside" checkout -q FETCH_HEAD
         ( cd "$alongside" && ./configure -fPIC && make -j"$(nproc)" )
 
         # CADICAL_DIR has to outrank the CaDiCaL in deps/install. find_library
