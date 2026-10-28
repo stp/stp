@@ -176,6 +176,8 @@ auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
 }
 const char* error_template(ErrorCode code);
 bool error_recoverable(ErrorCode code);
+// The OPTION_* codes, the ones whose record names an option.
+bool is_option_error(ErrorCode code);
 
 // ---------------------------------------------------------------- nodes
 

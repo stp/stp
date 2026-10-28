@@ -53,7 +53,8 @@ const detail::OptionSpec* stable_spec(stp_option o, const char* fn, int arg)
   if (static_cast<unsigned>(o) < static_cast<unsigned>(STP_NUM_STABLE_OPTIONS))
     if (const detail::OptionSpec* spec = detail::stable_option_spec(static_cast<std::size_t>(o)))
       return spec;
-  detail::fail(ErrorCode::OPTION_UNKNOWN, fn, "not a stable option", arg);
+  detail::fail(ErrorCode::OPTION_UNKNOWN, fn, "not a stable option", arg, {}, {},
+               std::to_string(static_cast<int>(o)));
 }
 
 std::string option_text_of(const detail::OptionSpec& spec, const OptionValue& v)
