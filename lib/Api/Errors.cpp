@@ -244,6 +244,21 @@ bool error_recoverable(ErrorCode code)
   return e ? e->recoverable : false;
 }
 
+bool is_option_error(ErrorCode code)
+{
+  switch (code)
+  {
+  case ErrorCode::OPTION_UNKNOWN:
+  case ErrorCode::OPTION_VALUE:
+  case ErrorCode::OPTION_TIMING:
+  case ErrorCode::OPTION_CONFLICT:
+  case ErrorCode::OPTION_UNAVAILABLE:
+    return true;
+  default:
+    return false;
+  }
+}
+
 namespace
 {
 // The policy for the two unsafe codes, process-wide: written from any thread,

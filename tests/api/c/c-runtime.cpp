@@ -628,6 +628,33 @@ TEST(c_runtime, the_thread_record_is_cleared_to_ask_a_registry_query)
   EXPECT_EQ(nullptr, stp_last_error());
 }
 
+// An OPTION_* record names the option even when the name is empty (#1381): the
+// field was NULL for "", which the header keeps for codes that name no option.
+TEST(c_runtime, an_unknown_empty_option_name_is_recorded)
+{
+  for (const char* name : {"no-such-option", ""})
+  {
+    SCOPED_TRACE(name);
+    stp_clear_last_error();
+    EXPECT_EQ(nullptr, stp_option_info_type(name));
+    const stp_error* e = stp_last_error();
+    ASSERT_NE(nullptr, e);
+    EXPECT_EQ(STP_ERR_OPTION_UNKNOWN, e->code);
+    ASSERT_NE(nullptr, e->option);
+    EXPECT_STREQ(name, e->option);
+
+    stp_clear_last_error();
+    stp_option o;
+    EXPECT_NE(STP_OK, stp_option_from_name(name, &o));
+    e = stp_last_error();
+    ASSERT_NE(nullptr, e);
+    EXPECT_EQ(STP_ERR_OPTION_UNKNOWN, e->code);
+    ASSERT_NE(nullptr, e->option);
+    EXPECT_STREQ(name, e->option);
+  }
+  stp_clear_last_error();
+}
+
 TEST(c_runtime, no_limit_round_trips_through_the_duration_functions)
 {
   // max-time's default, read and copied the way a C client copies a setting
@@ -724,6 +751,8 @@ TEST(c_runtime, a_negative_enum_value_is_refused)
     EXPECT_EQ(nullptr, stp_option_name(static_cast<stp_option>(v)));
     ASSERT_NE(nullptr, stp_last_error());
     EXPECT_EQ(STP_ERR_OPTION_UNKNOWN, stp_last_error()->code);
+    ASSERT_NE(nullptr, stp_last_error()->option);
+    EXPECT_EQ(std::to_string(v), stp_last_error()->option);
     stp_clear_last_error();
   }
   stp_tm_release_all(tm);

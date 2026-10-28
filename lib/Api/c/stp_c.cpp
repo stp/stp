@@ -92,7 +92,8 @@ void ErrorRecord::set(ErrorCode code, const char* fn, const std::string& msg, in
     terms = ts;
     sorts = ss;
     view.message = message.c_str();
-    view.option = option.empty() ? nullptr : option.c_str();
+    // "" is a name like any other: an unknown option can be the empty one
+    view.option = detail::is_option_error(code) ? option.c_str() : nullptr;
   }
   catch (...)
   {
