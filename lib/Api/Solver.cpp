@@ -126,10 +126,10 @@ private:
 };
 
 // What the engine checks of the entries only once they are applied: the
-// CaDiCaL knobs against the backend and the build, and an explicit request
-// for arithmetic decision polarity against what it needs. Refused at
-// construction, at every check and by a solver's resolve(), in the engine's
-// words.
+// CaDiCaL knobs and the SAT phase controls against the backend and the
+// build, and an explicit request for arithmetic decision polarity against
+// what it needs. Refused at construction, at every check and by a solver's
+// resolve(), in the engine's words.
 void validate_engine_options(const UserDefinedFlags& flags)
 {
   try
@@ -147,6 +147,29 @@ void validate_engine_options(const UserDefinedFlags& flags)
                            : STP_BUILD_WITH_CADICAL == 0 ? ErrorCode::OPTION_UNAVAILABLE
                                                          : ErrorCode::OPTION_VALUE;
     fail_option(code, name, e.what());
+  }
+  // The phase controls configure CaDiCaL and Kissat, and no other backend
+  // has them. Where the backend is built, inside the check, the refusal is
+  // an engine failure that poisons the manager; here it is the caller's.
+  if (flags.sat_search_options.hasOverrides() &&
+      flags.solver_to_use != UserDefinedFlags::CADICAL_SOLVER &&
+      flags.solver_to_use != UserDefinedFlags::KISSAT_SOLVER)
+  {
+    std::string name;
+    for (const SatSearchOptions::Entry& entry :
+         flags.sat_search_options.entries())
+      if (name.empty() && entry.value >= 0)
+        name = std::string("sat-") + entry.name;
+    const bool cadical = has_sat_backend("cadical");
+    const bool kissat = has_sat_backend("kissat");
+    if (!cadical && !kissat)
+      fail_option(ErrorCode::OPTION_UNAVAILABLE, name,
+                  "--" + name + " requires a build with CaDiCaL or Kissat");
+    fail_option(ErrorCode::OPTION_CONFLICT, name,
+                "--" + name + " requires " +
+                    (cadical && kissat ? "--cadical or --kissat"
+                     : cadical         ? "--cadical"
+                                       : "--kissat"));
   }
   // The default preference yields to what the backend can do; an explicit
   // request is refused when it cannot be honoured.
