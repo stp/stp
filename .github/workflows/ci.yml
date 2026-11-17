@@ -1703,10 +1703,25 @@ jobs:
         key: ccache-i386/${{ github.run_id }}
         restore-keys: ccache-i386/
 
+    # Docker 29.4.2, in the ubuntu-26.04 runner image, has a default seccomp
+    # profile (moby seccomp/v0.2.2) that refuses socketcall(2) with ENOSYS.
+    # Debian's i386 glibc makes every socket call through socketcall, so the
+    # container could open no socket at all, and apt-get failed on "Temporary
+    # failure resolving 'deb.debian.org'" before anything was built. The
+    # seccomp/v0.2.3 profile, Docker 29.4.3's default, differs from v0.2.2
+    # only in allowing socketcall again; it is fetched by its tag's commit.
+    # Drop this once the runner image ships Docker 29.4.3
+    # (actions/runner-images#14790).
+    - name: Fetch a seccomp profile that allows socketcall
+      run: |
+        curl -fsSL -o "$RUNNER_TEMP/seccomp.json" \
+          https://raw.githubusercontent.com/moby/profiles/836ae4d37ef2ec995c77c99fc55f5b5f3af3a897/seccomp/default.json
+
     - name: Build and test in a 32-bit container
       run: |
         mkdir -p .ccache
         docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
+          --security-opt seccomp="$RUNNER_TEMP/seccomp.json" \
           -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=400M -e CCACHE_UMASK=022 \
           i386/debian:bookworm linux32 ./scripts/ci-32bit.sh
 
