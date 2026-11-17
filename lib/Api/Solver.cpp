@@ -128,7 +128,8 @@ private:
 // What the engine checks of the entries only once they are applied: the
 // CaDiCaL knobs against the backend and the build, and an explicit request
 // for arithmetic decision polarity against what it needs. Refused at
-// construction and at every check, in the engine's words.
+// construction, at every check and by a solver's resolve(), in the engine's
+// words.
 void validate_engine_options(const UserDefinedFlags& flags)
 {
   try
@@ -1319,7 +1320,18 @@ OptionInfo SolverOptions::info(std::string_view name) const
 }
 std::vector<std::string> SolverOptions::names(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::names")->options.names(tier); }
 std::string SolverOptions::help(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::help")->options.help(tier); }
-void SolverOptions::resolve() const { viewed(solver_, "SolverOptions::resolve")->options.resolve("SolverOptions::resolve"); }
+// What the next check refuses of the options: their relations, and what the
+// engine cannot honour of them once applied. Those are this solver's applied
+// options, so it is made the active one to ask, as the check makes it.
+void SolverOptions::resolve() const
+{
+  SolverImpl* s = viewed(solver_, "SolverOptions::resolve");
+  s->options.resolve("SolverOptions::resolve");
+  s->enter("SolverOptions::resolve");
+  detail::engine_call(
+      s->mgr, "SolverOptions::resolve",
+      [&] { detail::validate_engine_options(s->mgr->bm->UserFlags); });
+}
 
 // ============================================================ Solver
 

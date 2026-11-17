@@ -560,6 +560,38 @@ TEST(Runs, the_solver_refuses_what_the_applied_options_cannot_honour)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// A solver's resolve() reports what its next check would refuse, the
+// refusals of the applied options included, and those are its own: another
+// solver's options, active or not, have no say in them.
+TEST(Runs, a_solvers_resolve_reports_what_its_check_would_refuse)
+{
+  if (!has_sat_backend("cadical") || !has_sat_backend("cryptominisat"))
+    GTEST_SKIP() << "needs CaDiCaL and CryptoMiniSat";
+  TermManager tm;
+  Options cms;
+  cms.set_str("sat-backend", "cryptominisat");
+  Solver refused(tm, cms);
+  refused.options().set_int("cadical-elim", 1);
+  API_EXPECT_ERROR(ErrorCode::OPTION_CONFLICT, refused.options().resolve());
+  // another solver, made active by its construction, resolves on its own
+  Options cadical;
+  cadical.set_str("sat-backend", "cadical");
+  cadical.set_int("cadical-elim", 1);
+  Solver fine(tm, cadical);
+  fine.options().resolve();
+  const std::optional<RecoverableError> e =
+      API_ERROR_OF(refused.options().resolve());
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::OPTION_CONFLICT) << e->what();
+  EXPECT_EQ(e->option(), "cadical-elim");
+  fine.options().resolve();
+  EXPECT_TRUE(fine.check_sat().is_sat());
+  API_EXPECT_ERROR(ErrorCode::OPTION_CONFLICT, refused.check_sat());
+  refused.options().reset("cadical-elim");
+  refused.options().resolve();
+  EXPECT_TRUE(refused.check_sat().is_sat());
+}
+
 TEST(Runs, the_sat_versions_are_listed_in_the_builds_order)
 {
   const std::map<std::string, std::string> c = capabilities();
