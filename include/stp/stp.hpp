@@ -940,6 +940,9 @@ public:
   OptionInfo info(std::string_view name) const;
   std::vector<std::string> names(std::optional<Tier> = std::nullopt) const;
   std::string help(std::optional<Tier> = std::nullopt) const;
+  /// As Options::resolve(), and what the next check refuses of the options
+  /// once applied (a backend that cannot honour an entry, say): every refusal
+  /// a check would make of them, as it would make it.
   void resolve() const;
 
   // internal

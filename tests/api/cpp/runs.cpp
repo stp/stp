@@ -560,6 +560,92 @@ TEST(Runs, the_solver_refuses_what_the_applied_options_cannot_honour)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// The SAT phase controls configure CaDiCaL and Kissat, and no other backend
+// has them. On any other they reached the backend's construction inside the
+// check, whose refusal was an engine failure: INTERNAL, and the manager
+// poisoned for every later call. They are refused as the CaDiCaL knobs are,
+// at construction and at the check, naming the entry and leaving the manager
+// usable.
+TEST(Runs, sat_phase_options_are_refused_on_a_backend_without_phases)
+{
+  std::optional<std::string> backend;
+  for (const char* name : {"cryptominisat", "minisat", "simplifying-minisat"})
+    if (!backend && has_sat_backend(name))
+      backend = name;
+  if (!backend)
+    GTEST_SKIP() << "every backend of this build has phase controls";
+  // a build with neither CaDiCaL nor Kissat cannot honour them at all
+  const ErrorCode expected =
+      has_sat_backend("cadical") || has_sat_backend("kissat")
+          ? ErrorCode::OPTION_CONFLICT
+          : ErrorCode::OPTION_UNAVAILABLE;
+  TermManager tm;
+  Options on_backend;
+  on_backend.set_str("sat-backend", *backend);
+  for (const char* name :
+       {"sat-phase", "sat-forcephase", "sat-rephase", "sat-target"})
+  {
+    Options o = on_backend;
+    o.set_int(name, 0);
+    const std::optional<RecoverableError> e = API_ERROR_OF(Solver(tm, o));
+    ASSERT_TRUE(e.has_value()) << name;
+    EXPECT_EQ(e->code(), expected) << e->what();
+    EXPECT_EQ(e->option(), name);
+    EXPECT_NE(
+        std::string(e->what()).find(std::string("--") + name + " requires"),
+        std::string::npos)
+        << e->what();
+    // the default asks for nothing
+    o.set_int(name, -1);
+    Solver ok(tm, o);
+    EXPECT_TRUE(ok.check_sat().is_sat()) << name;
+  }
+
+  // set on a live solver, resolve() and the check refuse it, and refuse it
+  // again: nothing is poisoned
+  Solver s(tm, on_backend);
+  s.add(tm.mk_true());
+  s.options().set_int("sat-phase", 1);
+  API_EXPECT_ERROR(expected, s.options().resolve());
+  API_EXPECT_ERROR(expected, s.check_sat());
+  API_EXPECT_ERROR(expected, s.check_sat());
+  s.options().reset("sat-phase");
+  s.options().resolve();
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
+// A solver's resolve() reports what its next check would refuse, the
+// refusals of the applied options included, and those are its own: another
+// solver's options, active or not, have no say in them.
+TEST(Runs, a_solvers_resolve_reports_what_its_check_would_refuse)
+{
+  if (!has_sat_backend("cadical") || !has_sat_backend("cryptominisat"))
+    GTEST_SKIP() << "needs CaDiCaL and CryptoMiniSat";
+  TermManager tm;
+  Options cms;
+  cms.set_str("sat-backend", "cryptominisat");
+  Solver refused(tm, cms);
+  refused.options().set_int("cadical-elim", 1);
+  API_EXPECT_ERROR(ErrorCode::OPTION_CONFLICT, refused.options().resolve());
+  // another solver, made active by its construction, resolves on its own
+  Options cadical;
+  cadical.set_str("sat-backend", "cadical");
+  cadical.set_int("cadical-elim", 1);
+  Solver fine(tm, cadical);
+  fine.options().resolve();
+  const std::optional<RecoverableError> e =
+      API_ERROR_OF(refused.options().resolve());
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::OPTION_CONFLICT) << e->what();
+  EXPECT_EQ(e->option(), "cadical-elim");
+  fine.options().resolve();
+  EXPECT_TRUE(fine.check_sat().is_sat());
+  API_EXPECT_ERROR(ErrorCode::OPTION_CONFLICT, refused.check_sat());
+  refused.options().reset("cadical-elim");
+  refused.options().resolve();
+  EXPECT_TRUE(refused.check_sat().is_sat());
+}
+
 TEST(Runs, the_sat_versions_are_listed_in_the_builds_order)
 {
   const std::map<std::string, std::string> c = capabilities();

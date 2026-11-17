@@ -846,9 +846,9 @@ int CommandLine::parse_options(int argc, char** argv)
     invocation.interactive = interactive;
 
   // The solver applies the options and refuses what the applied options
-  // cannot honour (CaDiCaL's knobs, an explicit --lra-decision-polarity
-  // without what it needs, a SAT search reset on a backend that cannot do
-  // one), in the engine's words.
+  // cannot honour (CaDiCaL's knobs, the phase controls on a backend without
+  // them, an explicit --lra-decision-polarity without what it needs, a SAT
+  // search reset on a backend that cannot do one), in the engine's words.
   //
   // The reset's refusal is set aside rather than reported here, as a
   // HiGHS-only search is: the command line has always checked for it with
