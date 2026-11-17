@@ -150,6 +150,44 @@ TEST(c_runtime, invalid_names_are_recoverable)
   stp_tm_release(tm);
 }
 
+TEST(c_runtime, every_accepted_function_name_prints_in_a_counterexample)
+{
+  // stp_declare admits UTF-8 and SMT-LIB whitespace in a name, so the
+  // function model print-counterex writes after sat must render each of
+  // them, not fail the check and poison the manager (#1384).
+  for (const char* name : {"f\xc3\xa9", "f\tg", "f\ng", "f\rg", "f g"})
+  {
+    SCOPED_TRACE(testing::PrintToString(name));
+    stp_tm tm = stp_tm_new(nullptr);
+    stp_tm_scope_push(tm);
+    stp_sort bv8 = stp_mk_bv_sort(tm, 8);
+    stp_term f = stp_declare(tm, name, stp_mk_fun_sort(tm, 1, &bv8, bv8));
+    ASSERT_NE(nullptr, f);
+    stp_term x = stp_declare(tm, "x", bv8);
+    stp_solver s = stp_solver_new(tm, nullptr);
+    std::string printed;
+    stp_solver_set_output_sink(
+        s, [](const char* text, size_t n, void* user)
+        { static_cast<std::string*>(user)->append(text, n); }, &printed);
+    ASSERT_EQ(STP_OK, stp_solver_set_bool(s, "print-counterex", true));
+    ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(tm, stp_apply(tm, f, x),
+                                                  stp_mk_bv_uint64(tm, 8, 1))));
+    stp_result r{};
+    const stp_status rc = stp_solver_check_sat(s, &r);
+    const stp_error* e = stp_tm_error(tm);
+    EXPECT_EQ(nullptr, e) << e->message;
+    EXPECT_EQ(STP_OK, rc);
+    EXPECT_EQ(STP_SAT, r.kind);
+    EXPECT_NE(std::string::npos,
+              printed.find(std::string("(define-fun |") + name + "| ("))
+        << printed;
+    EXPECT_NE(nullptr, stp_mk_bv_sort(tm, 8));
+    stp_solver_delete(s);
+    stp_tm_scope_pop(tm);
+    stp_tm_release(tm);
+  }
+}
+
 TEST(c_runtime, the_manager_outlives_every_release_order)
 {
   // (a) the manager handle goes first; terms, solver and model keep working

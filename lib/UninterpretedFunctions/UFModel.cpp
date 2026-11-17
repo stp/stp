@@ -30,9 +30,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/Util/SymbolName.h"
 #include "extlib-constbv/constantbv.h"
 #include <algorithm>
-#include <cctype>
 #include <map>
 #include <sstream>
 
@@ -42,19 +42,12 @@ namespace stp
 namespace
 {
 
-bool validQuotedSymbol(const std::string& name)
-{
-  // SMT-LIB quoted symbols have no escape for either delimiter character.
-  // Parser declarations have already stripped their surrounding bars.
-  for (const unsigned char c : name)
-    if (c == '|' || c == '\\' || !std::isprint(c))
-      return false;
-  return true;
-}
-
 void printQuotedSymbol(std::ostream& os, const std::string& name)
 {
-  if (!validQuotedSymbol(name))
+  // UFContext::declareFunction admitted the name by this same test, so a
+  // name it refuses here was never declared. Parser declarations have
+  // already stripped their surrounding bars.
+  if (!isSMTLIBSymbolContent(name))
     FatalError("UF model contains an external name that cannot be rendered "
                "as an SMT-LIB2 quoted symbol");
   os << '|' << name << '|';
