@@ -26,6 +26,11 @@ add_library(simplifier OBJECT
     PropagateEqualities.cpp
     DistinctOrdering.cpp
     RemoveUnconstrained.cpp
+    MutableGraph.cpp
+    GraphRulePass.cpp
+    GraphRulePasses.cpp
+    GraphConstantBitPropagation.cpp
+    StrengthReducingNodeFactory.cpp
     Simplifier.cpp
     SubstitutionMap.cpp
     VariablesInExpression.cpp

@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/NodeSimplifier.h"
+#include <set>
 #include <ankerl/unordered_dense.h>
 
 /* 
@@ -43,6 +44,7 @@ or (=SYMBOL BVCONST).
 
 namespace stp
 {
+class MutableGraph;
 
 class PropagateEqualities : public NodeSimplifier
 {
@@ -52,6 +54,18 @@ class PropagateEqualities : public NodeSimplifier
   const ASTNode ASTTrue, ASTFalse;
 
 public:
+  // The same substitutions applied on a MutableGraph instead of through
+  // the substitution map's rebuild: candidates are read off the graph's
+  // root conjunction and decided exactly as processCandidates decides
+  // them (its merged variable sets are what make the loop check cheap
+  // over tens of thousands of candidates); each chosen symbol is then
+  // forwarded to its term as the graph has it. The definitions still go
+  // into the substitution map, for the model. Returns how many were
+  // applied. `untouchable`: symbols that must keep their defining
+  // constraint (an image-constrained fresh symbol's lives outside the
+  // graph).
+  size_t applyOnGraph(MutableGraph& g, const std::set<ASTNode>* untouchable);
+
   // Flat open-addressing set: the sets are hot (closure folds, membership
   // probes), and only their *contents* matter to the algorithm, never their
   // iteration order.
@@ -81,7 +95,11 @@ private:
 
   std::vector < std::pair<ASTNode, ASTNode> > candidates;
 
-  void processCandidates(bool preserveDefaultGrammar);
+  // Decides and records the substitutions. With a graph, each is also
+  // applied to it (the symbol forwarded to its term as the graph has it)
+  // and symbols in `untouchable` are skipped. Returns how many.
+  size_t processCandidates(bool preserveDefaultGrammar, MutableGraph* g = NULL,
+                           const std::set<ASTNode>* untouchable = NULL);
 
   MapToNodeSet buildMapOfLHStoVariablesInRHS(const IdSet&);
 

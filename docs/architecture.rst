@@ -247,7 +247,7 @@ runs them.
    </div>
    <div class="pipe-detail" id="stage-size-reducing">
    <h4>Size-reducing passes</h4>
-   <p>A sequence chosen so that no pass in it can make the multigraph bigger. Each one can expose work for the others — eliminating an unconstrained variable can make an equality propagatable, which can fix more bits — so the sequence runs once and is then repeated until a round changes nothing. Rebuilding the analysis state each round is what makes the repeat expensive, so it is entered only for a formula with no array operations and fewer nodes than <code>--size-reducing-fixed-point-limit</code>; passing <code>-1</code> drops the size condition.</p>
+   <p>A sequence chosen so that no pass in it can make the multigraph bigger. Each one can expose work for the others — eliminating an unconstrained variable can make an equality propagatable, which can fix more bits — so the sequence runs once and is then repeated until a round changes nothing. Rebuilding the analysis state each round is what makes the repeat expensive, so it is entered only for a formula with fewer nodes than <code>--size-reducing-fixed-point-limit</code> (100,000 by default); passing <code>-1</code> drops the size condition.</p>
    </div>
    <div class="pipe-detail" id="stage-fp-lower">
    <h4>Floating-point lowering</h4>
@@ -298,9 +298,8 @@ for the others -- eliminating an unconstrained variable can make an
 equality propagatable, which can fix more bits -- so one sweep leaves
 easy reductions on the table. The repeat is not free, because the state
 is discarded and rebuilt each time, so it is only entered for a formula
-with no array operations and fewer nodes than
-``--size-reducing-fixed-point-limit``. Passing ``-1`` removes the size
-condition.
+with fewer nodes than ``--size-reducing-fixed-point-limit``, 100,000 by
+default. Passing ``-1`` removes the size condition.
 
 **The simplify-and-solve loop** repeats for the same reason but is not
 guarded, because its passes are the ones that shrink the formula most

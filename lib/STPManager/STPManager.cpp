@@ -80,8 +80,21 @@ void prepareStrongDenseInsert(DenseTable& table)
 
 // Probe the unique table with a non-owning (kind, borrowed children) key. On
 // a hit nothing is built; only on a miss is the tail-allocated node created.
+ASTInterior* STPMgr::FindInterior(Kind kind, ASTChildren children)
+{
+  const ASTInteriorSet::iterator it =
+      _interior_unique_table.find(ASTInterior::Probe{kind, children});
+  return it == _interior_unique_table.end() ? NULL : *it;
+}
+
 ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTChildren children)
 {
+#ifndef NDEBUG
+  // A MutableGraph's node is keyed in that graph's table, and an edit to it
+  // would change this node's meaning behind the table's back.
+  for (const ASTNode& child : children)
+    assert(!child.isMutableInterior());
+#endif
   const ASTInteriorSet::iterator it =
       _interior_unique_table.find(ASTInterior::Probe{kind, children});
   if (it != _interior_unique_table.end())

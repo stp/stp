@@ -24,6 +24,13 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include <stdio.h>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphRulePasses.h"
+#endif
+
+
 
   const std::string start_input = R"(
   (set-logic QF_BV)
@@ -75,6 +82,10 @@ struct Context
       // TODO assert it was parsed properly.
       smt2lex_destroy();
       ASTNode n = mgr.CreateNode(stp::AND, mgr.GetAsserts());
+#ifdef STP_TEST_PASSES_ON_GRAPH
+      stp::GraphFindPureLiterals find(&mgr);
+      n = find.topLevel(n, &simplifier);
+#else
       stp::FindPureLiterals find;
       const auto changed = find.topLevel(n, &simplifier, &mgr);
 
@@ -83,6 +94,7 @@ struct Context
         n = simplifier.applySubstitutionMap(n);
         simplifier.haveAppliedSubstitutionMap();
       }
+#endif
       return n;
     }
 };

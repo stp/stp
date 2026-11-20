@@ -27,6 +27,20 @@ THE SOFTWARE.
 #include <stdio.h>
 #include <unordered_set>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphRulePasses.h"
+// The graph pass takes only the manager; the cases pass a factory too.
+struct FlattenImpl : stp::GraphFlatten
+{
+  FlattenImpl(stp::STPMgr* mgr, NodeFactory*) : stp::GraphFlatten(mgr) {}
+};
+#else
+typedef stp::Flatten FlattenImpl;
+#endif
+
+
 
   const std::string start_input = R"(
   (set-logic QF_BV)
@@ -54,7 +68,7 @@ struct Context
    stp::STPMgr mgr;
    SimplifyingNodeFactory snf;
    stp::Cpp_interface interface;
-   stp::Flatten flatten;
+   FlattenImpl flatten;
 
    Context() :
    snf (*(mgr.hashingNodeFactory), mgr),

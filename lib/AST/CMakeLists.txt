@@ -49,6 +49,7 @@ add_library(AST OBJECT
     ASTmisc.cpp
     ASTSymbol.cpp
     MutableASTNode.cpp
+    MutableInterior.cpp
 )
 
 add_dependencies(AST ASTKind_header)

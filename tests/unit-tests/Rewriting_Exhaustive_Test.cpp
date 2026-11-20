@@ -52,6 +52,19 @@ THE SOFTWARE.
 #include <string>
 #include <vector>
 
+// STP_TEST_PASSES_ON_GRAPH, set by the *_Graph_Test wrapper, runs the same
+// cases through the graph-backed pass (--passes-on-graph).
+#ifdef STP_TEST_PASSES_ON_GRAPH
+#include "stp/Simplifier/GraphRulePasses.h"
+// The graph pass takes only the manager; the cases pass a factory too.
+struct RewritingImpl : stp::GraphRewriting
+{
+  RewritingImpl(stp::STPMgr* mgr, NodeFactory*) : stp::GraphRewriting(mgr) {}
+};
+#else
+typedef stp::Rewriting RewritingImpl;
+#endif
+
 using namespace stp;
 
 namespace
@@ -96,7 +109,7 @@ struct Context
 
   ASTNode run(ASTNode f)
   {
-    Rewriting r(&mgr, nf);
+    RewritingImpl r(&mgr, nf);
     return r.topLevel(f);
   }
 
