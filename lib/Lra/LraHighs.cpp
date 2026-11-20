@@ -233,6 +233,10 @@ public:
         rows.size() > 200000)
       return false;
     const double infinity = Highs_getInfinity(engine.ptr);
+    double small_matrix_value = 0;
+    if (Highs_getDoubleOptionValue(engine.ptr, "small_matrix_value",
+                                   &small_matrix_value) != kHighsStatusOk)
+      return false;
     std::vector<double> lower(symbols.size(), -infinity),
         upper(symbols.size(), infinity);
     std::vector<double> cost(symbols.size(), 0.0), rl, ru, value;
@@ -251,6 +255,11 @@ public:
         lower[c] = convert(box[c].lower->value);
       if (box[c].upper)
         upper[c] = convert(box[c].upper->value);
+      // HiGHS reports inconsistent bounds as infeasible without constructing
+      // a simplex basis, so requesting its dual ray would assert. Let the
+      // exact LRA solver handle this conflict instead.
+      if (lower[c] > upper[c])
+        return false;
     }
     for (const auto& row : rows)
     {
@@ -258,8 +267,13 @@ public:
       rl.push_back(row.equality ? ru.back() : -infinity);
       for (const auto& t : row.terms)
       {
+        const double coefficient = convert(t.coefficient);
+        // HiGHS drops entries at or below this cutoff. That can make an
+        // otherwise feasible row infeasible without building a simplex basis.
+        if (std::abs(coefficient) <= small_matrix_value)
+          return false;
         index.push_back(static_cast<HighsInt>(t.col));
-        value.push_back(convert(t.coefficient));
+        value.push_back(coefficient);
       }
       if (value.size() > 4000000)
         return false;
